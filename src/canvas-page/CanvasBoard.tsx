@@ -12,10 +12,11 @@ import { styled, useTheme } from 'storybook/theming/emotion';
 
 import { boardKeyAction, focusPlace } from '../board/keyboard';
 import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect } from '../board/frame-defaults';
+import { type StoryTitle, storyTitle, storyTitleFromId } from '../board/story-title';
 import { boundsOf, worldRectToScreen } from '../board/viewport';
 import type { CanvasFile } from '../canvas-file';
 import { type ChannelLike, requestCanvas } from '../channel';
-import { BoardNotice } from './board/BoardNotice';
+import { BoardNotice, type BoardNoticeContent } from './board/BoardNotice';
 import { BoardToolbar } from './board/BoardToolbar';
 import { FrameBody } from './board/FrameBody';
 import { FrameChrome, type GestureHandlers, type ResizeEdge } from './board/FrameChrome';
@@ -77,16 +78,9 @@ const PanCatcher = styled.div({
   '[data-panning] > &': { cursor: 'grabbing' },
 });
 
-interface StoryTitle {
-  short: string;
-  full: string;
-}
-
 function titleOf(status: StoryStatus): StoryTitle | undefined {
   const story = status.kind === 'ready' ? status.story : status.kind === 'error' ? status.story : undefined;
-  if (!story) return undefined;
-  const component = story.title.split('/').pop() ?? story.title;
-  return { short: `${component} / ${story.name}`, full: `${story.title} › ${story.name}` };
+  return story && storyTitle(story);
 }
 
 export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
@@ -99,10 +93,11 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<BoardNoticeContent | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
+  const showError = useCallback((message: string) => setNotice({ message, tone: 'error' }), []);
 
-  const edits = useFrameEdits(canvas, channel, setNotice);
+  const edits = useFrameEdits(canvas, channel, showError);
   const frames = edits.frames;
   const scene = useRef<PaintScene>(null as unknown as PaintScene);
   const { canvasRef, size, paint } = useDrawableCanvas(rootRef, scene);
@@ -123,13 +118,13 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         setSelectedId(result.frame.id);
         return result.frame.id;
       } catch (error) {
-        setNotice(`Couldn't add the story: ${error instanceof Error ? error.message : String(error)}`);
+        showError(`Couldn't add the story: ${error instanceof Error ? error.message : String(error)}`);
         return undefined;
       }
     },
-    [channel, canvas.id],
+    [channel, canvas.id, showError],
   );
-  const dropping = useStoryDrop({ root: rootRef, view: board.view, preview, addFrame, onError: setNotice });
+  const dropping = useStoryDrop({ root: rootRef, view: board.view, preview, addFrame, onError: showError });
 
   scene.current = {
     view: board.view,
@@ -152,14 +147,65 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     if (selectedId && !frames.some((frame) => frame.id === selectedId)) setSelectedId(null);
   }, [frames, selectedId]);
 
-  const remove = edits.remove;
-  // Escape deselects when focus is on the board. Delete/Backspace are handled only by a frame's
-  // title (FrameChrome): a press inside a story leaves focus on the board root or in the story, and
-  // must never remove the frame (src/board/keyboard.ts).
+  const framesRef = useRef(frames);
+  framesRef.current = frames;
+  const titlesRef = useRef(titles);
+  titlesRef.current = titles;
+
+  // Removing a frame: it goes at once, focus moves to the board (its title is gone), and a notice
+  // offers Undo, which puts it back with the same id, position, size and place in the stacking order.
+  const fileRef = useRef(canvas);
+  fileRef.current = canvas;
+  const undoRef = useRef<(() => void) | null>(null);
+  const editsRemove = edits.remove;
+  const editsRestore = edits.restore;
+  const remove = useCallback(
+    (frameId: string) => {
+      const frame = framesRef.current.find((f) => f.id === frameId);
+      if (!frame) return;
+      const index = fileRef.current.frames.findIndex((f) => f.id === frameId);
+      const name = titlesRef.current.get(frameId)?.short ?? storyTitleFromId(frame.storyId).short;
+      const removed = editsRemove(frameId);
+      rootRef.current?.focus({ preventScroll: true });
+      const undo = () => {
+        if (undoRef.current !== undo) return;
+        undoRef.current = null;
+        setNotice(null);
+        // The removal must have landed before the frame can go back under the same id.
+        void removed
+          .then(() => editsRestore(frame, index < 0 ? fileRef.current.frames.length : index))
+          .then((restored) => {
+            if (!restored) return;
+            setSelectedId(frame.id);
+            rootRef.current?.focus({ preventScroll: true });
+          });
+      };
+      undoRef.current = undo;
+      setNotice({ message: `Removed ${name}`, tone: 'info', action: { label: 'Undo', run: undo } });
+    },
+    [editsRemove, editsRestore],
+  );
+  // Undo is on offer only while its notice is showing.
+  useEffect(() => {
+    if (!notice?.action) undoRef.current = null;
+  }, [notice]);
+
+  // Escape deselects when focus is on the board, and ⌘Z undoes a removal while its notice shows.
+  // Delete/Backspace are handled only by a frame's title (FrameChrome): a press inside a story
+  // leaves focus on the board root or in the story, and must never remove the frame
+  // (src/board/keyboard.ts).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const place = focusPlace(document.activeElement);
-      if (boardKeyAction(event, place, { hasSelection: selectedId !== null }) === 'deselect') setSelectedId(null);
+      const action = boardKeyAction(event, place, {
+        hasSelection: selectedId !== null,
+        canUndo: undoRef.current !== null,
+      });
+      if (action === 'deselect') setSelectedId(null);
+      else if (action === 'undo') {
+        event.preventDefault();
+        undoRef.current?.();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -188,8 +234,6 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   // Gestures read the frame as it was when they started; the view cannot change mid-gesture.
   const viewRef = useRef(board.view);
   viewRef.current = board.view;
-  const framesRef = useRef(frames);
-  framesRef.current = frames;
   const heightsRef = useRef(heights);
   heightsRef.current = heights;
 
@@ -296,7 +340,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
       </Surface>
       <ChromeLayer>
         {frames.map((frame) => {
-          const title = titles.get(frame.id);
+          const title = titles.get(frame.id) ?? storyTitleFromId(frame.storyId);
           return (
             <FrameChrome
               key={frame.id}
@@ -307,8 +351,8 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
                 width: frame.width,
                 height: heights.get(frame.id) ?? frame.height ?? MIN_FRAME_HEIGHT,
               })}
-              title={title?.short ?? frame.storyId}
-              fullTitle={title?.full ?? frame.storyId}
+              title={title.short}
+              fullTitle={title.full}
               selected={frame.id === selectedId}
               onSelect={() => setSelectedId(frame.id)}
               move={moveHandlers(frame.id)}
@@ -321,7 +365,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         })}
       </ChromeLayer>
       {spaceHeld && <PanCatcher data-colab-pan-catcher="" />}
-      <BoardNotice message={notice} onDismiss={dismissNotice} />
+      <BoardNotice notice={notice} onDismiss={dismissNotice} />
       <BoardToolbar
         zoom={board.view.zoom}
         onZoomIn={() => board.zoomStep(1)}

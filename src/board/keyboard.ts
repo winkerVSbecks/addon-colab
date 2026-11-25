@@ -59,29 +59,44 @@ export function focusPlace(element: FocusElement | null | undefined): FocusPlace
 export interface KeyLike {
   key: string;
   defaultPrevented?: boolean;
+  metaKey?: boolean;
+  ctrlKey?: boolean;
+  shiftKey?: boolean;
+  altKey?: boolean;
 }
 
-export type BoardKeyAction = 'deselect' | null;
+export type BoardKeyAction = 'deselect' | 'undo' | null;
+
+export interface BoardKeyState {
+  hasSelection: boolean;
+  /** A removed frame can still be put back (the notice with Undo is showing). */
+  canUndo?: boolean;
+}
 
 /**
  * What a key pressed anywhere in the preview does to the board (window-level handler). Frame
  * removal is not here: only a frame's title removes its frame (see `titleKeyAction`).
+ * ⌘Z / Ctrl+Z undoes a removal unless the key belongs to a text field or a story.
  */
-export function boardKeyAction(event: KeyLike, place: FocusPlace, state: { hasSelection: boolean }): BoardKeyAction {
+export function boardKeyAction(event: KeyLike, place: FocusPlace, state: BoardKeyState): BoardKeyAction {
   if (event.defaultPrevented) return null;
+  const isUndoKey =
+    event.key.toLowerCase() === 'z' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
+  if (isUndoKey && state.canUndo && place !== 'text' && place !== 'story') return 'undo';
   if (
     event.key === 'Escape' &&
     state.hasSelection &&
     (place === 'board' || place === 'frame-title' || place === 'none')
-  )
+  ) {
     return 'deselect';
+  }
   return null;
 }
 
 export type TitleKeyAction = { type: 'nudge'; dx: number; dy: number } | { type: 'remove' } | { type: 'select' } | null;
 
 /** What a key does while a frame's title has focus. */
-export function titleKeyAction(event: KeyLike & { shiftKey?: boolean }): TitleKeyAction {
+export function titleKeyAction(event: KeyLike): TitleKeyAction {
   const step = event.shiftKey ? 10 : 1;
   switch (event.key) {
     case 'ArrowLeft':

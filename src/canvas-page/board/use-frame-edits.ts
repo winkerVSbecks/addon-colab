@@ -35,8 +35,13 @@ export interface FrameEditsApi {
   preview: (frameId: string, changes: FrameEditChanges) => void;
   /** Saves the frame's pending change (end of a drag). */
   commit: (frameId: string) => void;
-  /** Hides the frame at once and removes it from the file. */
-  remove: (frameId: string) => void;
+  /** Hides the frame at once and removes it from the file. Resolves to whether the file was changed. */
+  remove: (frameId: string) => Promise<boolean>;
+  /**
+   * Puts a removed frame back with the same id, at `index` in the stacking order (undo of `remove`).
+   * Resolves to whether the frame is on the canvas afterwards.
+   */
+  restore: (frame: Frame, index: number) => Promise<boolean>;
   /** Reports a rendered height; saved after it settles if it differs from the file. */
   measured: (frameId: string, height: number) => void;
   /** Frame ids with a pointer gesture in progress (their measured height is not saved meanwhile). */
@@ -70,7 +75,7 @@ export function useFrameEdits(
   }, [canvas, update]);
 
   const write = useCallback(
-    async (frameId: string, run: () => Promise<{ canvas: CanvasFile }>) => {
+    async (frameId: string, run: () => Promise<{ canvas: CanvasFile }>): Promise<boolean> => {
       const saving = markSaving(editsRef.current, frameId);
       update(saving.edits);
       try {
@@ -78,11 +83,13 @@ export function useFrameEdits(
         update(markSaved(editsRef.current, frameId, saving.revision ?? -1, result.canvas.updatedAt));
         const latest = canvasRef.current;
         update(settleFrameEdits(editsRef.current, latest.frames, latest.updatedAt));
+        return true;
       } catch (error) {
         update(dropEdit(editsRef.current, frameId, saving.revision));
         // The frame was removed elsewhere meanwhile: nothing to save, and nothing to tell.
-        if (error instanceof CanvasRequestError && error.code === 'NOT_FOUND') return;
+        if (error instanceof CanvasRequestError && error.code === 'NOT_FOUND') return false;
         onErrorRef.current(`Couldn't save the change: ${describe(error)}`);
+        return false;
       }
     },
     [update],
@@ -120,9 +127,24 @@ export function useFrameEdits(
   const remove = useCallback(
     (frameId: string) => {
       update(withLiveEdit(editsRef.current, frameId, { removed: true }));
-      void write(frameId, () => requestCanvas(channel, 'removeFrame', { canvasId: canvasRef.current.id, frameId }));
+      return write(frameId, () => requestCanvas(channel, 'removeFrame', { canvasId: canvasRef.current.id, frameId }));
     },
     [channel, update, write],
+  );
+
+  const restore = useCallback(
+    async (frame: Frame, index: number) => {
+      try {
+        await requestCanvas(channel, 'restoreFrame', { canvasId: canvasRef.current.id, frame, index });
+        return true;
+      } catch (error) {
+        // Already back (undone twice, or restored elsewhere): nothing to do.
+        if (error instanceof CanvasRequestError && error.code === 'ALREADY_EXISTS') return true;
+        onErrorRef.current(`Couldn't put the story back: ${describe(error)}`);
+        return false;
+      }
+    },
+    [channel],
   );
 
   const measured = useCallback(
@@ -174,5 +196,5 @@ export function useFrameEdits(
   // `version` changes whenever the edits (kept in a ref) change.
   const frames = useMemo(() => applyFrameEdits(canvas.frames, editsRef.current), [canvas.frames, version]);
 
-  return { frames, preview, commit, remove, measured, setBusy };
+  return { frames, preview, commit, remove, restore, measured, setBusy };
 }

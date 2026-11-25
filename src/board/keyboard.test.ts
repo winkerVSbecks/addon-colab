@@ -115,3 +115,25 @@ describe('Space', () => {
     expect(spaceStartsPan(focusPlace(toolbarButton))).toBe(false);
   });
 });
+
+describe('⌘Z', () => {
+  const undo = { key: 'z', metaKey: true };
+
+  it('undoes a removal while it can be undone, from the board or its controls', () => {
+    for (const place of ['board', 'none', 'frame-title', 'control'] as const) {
+      expect(boardKeyAction(undo, place, { hasSelection: false, canUndo: true })).toBe('undo');
+    }
+    expect(boardKeyAction({ key: 'z', ctrlKey: true }, 'board', { hasSelection: false, canUndo: true })).toBe('undo');
+    expect(boardKeyAction({ key: 'Z', metaKey: true }, 'board', { hasSelection: false, canUndo: true })).toBe('undo');
+  });
+
+  it('is left alone when there is nothing to undo, in text fields and inside stories', () => {
+    expect(boardKeyAction(undo, 'board', { hasSelection: true })).toBeNull();
+    expect(boardKeyAction(undo, 'text', { hasSelection: false, canUndo: true })).toBeNull();
+    expect(boardKeyAction(undo, 'story', { hasSelection: false, canUndo: true })).toBeNull();
+    expect(boardKeyAction({ key: 'z' }, 'board', { hasSelection: false, canUndo: true })).toBeNull();
+    expect(
+      boardKeyAction({ key: 'z', metaKey: true, shiftKey: true }, 'board', { hasSelection: false, canUndo: true }),
+    ).toBeNull();
+  });
+});
