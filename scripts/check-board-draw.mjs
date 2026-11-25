@@ -3,7 +3,7 @@
 // around a story's button must still enclose that button's getBoundingClientRect at zoom 0.5 and 2,
 // after a reload, at DPR 1 and 2, and with hostile story CSS on the page.
 // Resets $CANVAS_DIR/board.json. Run:
-//   SB=http://127.0.0.1:6180 CANVAS_DIR=.sb-task8/canvases node scripts/check-board-draw.mjs
+//   SB=http://127.0.0.1:6180 CANVAS_DIR=<its canvas dir> node scripts/check-board-draw.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import {

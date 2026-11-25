@@ -10,8 +10,8 @@
 // - a unique button moved to another parent, Submit swapped for a disabled secondary Submit,
 //   unlabeled duplicate inputs, images and boxes;
 // - after a reload every pin is back on its original element.
-// Needs a Storybook whose stories glob includes scripts/fixtures (e.g. `-c .sb-7b`).
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6187 CANVAS_DIR=.sb-7b/canvases node scripts/check-board-comments-lookalikes.mjs
+// Needs a Storybook whose stories glob includes scripts/fixtures (`pnpm check:browser` starts one).
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6187 CANVAS_DIR=<its canvas dir> node scripts/check-board-comments-lookalikes.mjs
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 import {

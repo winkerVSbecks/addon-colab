@@ -1,6 +1,6 @@
 // Bring to front (task 6a): selecting a frame raises it above the others, so a huge frame cannot
 // cover the rest for good. The order is saved (frame order in the file is the stacking order).
-// Rewrites $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=.sb-6a/canvases node scripts/check-board-front.mjs [screenshot.png]
+// Rewrites $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=<its canvas dir> node scripts/check-board-front.mjs [screenshot.png]
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { BASE_CANVAS, CANVAS_FILE, SB, boardState, check, done, launch, modelPoint, previewFrame, setView, waitForBoard } from './board-lib.mjs';

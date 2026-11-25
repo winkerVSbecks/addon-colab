@@ -1,13 +1,13 @@
-// Shared helpers for the board browser checks (task 6). They drive the installed Chrome through
-// playwright-core: Playwright's bundled Chromium has no HTML-in-Canvas. playwright-core is not a
-// dependency of the addon; install it once with
-//   mkdir -p spike/.tools && cd spike/.tools && echo '{"private":true}' > package.json && npm i playwright-core
-import { createRequire } from 'node:module';
+// Shared helpers for the board browser checks. They drive the installed Chrome through
+// playwright-core (a dev dependency): Playwright's bundled Chromium has no HTML-in-Canvas.
+// Run them all with `pnpm check:browser` (scripts/run-browser-checks.mjs), which starts a throwaway
+// Storybook with its own config and canvas folder and sets $SB and $CANVAS_DIR for each check.
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const require = createRequire(fileURLToPath(new URL('../spike/.tools/package.json', import.meta.url)));
-export const { chromium } = require('playwright-core');
+import { chromium } from 'playwright-core';
+
+export { chromium };
 
 export const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 export const SB = process.env.SB ?? 'http://127.0.0.1:6160';
@@ -104,12 +104,15 @@ export async function setView(page, canvasId, view) {
 }
 
 /**
- * The test canvas the checks use: `board.json` with three example stories, in `$CANVAS_DIR` (the
- * canvas folder of the Storybook on `$SB`), `.sb-task6/canvases` by default.
+ * The test canvas the checks use: `board.json` in `$CANVAS_DIR`, the canvas folder of the Storybook
+ * on `$SB`. Refuses the project's own `.storybook/canvases`, which holds the user's canvases.
  */
-export const CANVAS_FILE = process.env.CANVAS_DIR
-  ? pathToFileURL(resolve(process.env.CANVAS_DIR, 'board.json'))
-  : new URL('../.sb-task6/canvases/board.json', import.meta.url);
+const CANVAS_DIR = process.env.CANVAS_DIR;
+if (!CANVAS_DIR) throw new Error('Set CANVAS_DIR, or run the checks with `pnpm check:browser`');
+if (resolve(CANVAS_DIR) === fileURLToPath(new URL('../.storybook/canvases', import.meta.url))) {
+  throw new Error('The browser checks rewrite board.json; never point CANVAS_DIR at .storybook/canvases');
+}
+export const CANVAS_FILE = pathToFileURL(resolve(CANVAS_DIR, 'board.json'));
 export const BASE_CANVAS = {
   schemaVersion: 1,
   id: 'board',

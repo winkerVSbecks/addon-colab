@@ -7,7 +7,7 @@
 // - agent comments over MCP appear within 2 s: frame anchors with and without x/y, a negative
 //   position, three on the same anchor (stacked), one on a removed frame (list only), a detached one;
 // - thread: reply, resolve, reopen from the list, delete and ⌘Z back; Escape leaves comment mode.
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6171 CANVAS_DIR=.sb-task7/canvases node scripts/check-board-comments.mjs
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6171 CANVAS_DIR=<its canvas dir> node scripts/check-board-comments.mjs
 import { readFileSync } from 'node:fs';
 
 import { CANVAS_FILE, SB, boardState, check, done, launch, modelPoint, previewFrame, resetCanvas, setView, waitForBoard } from './board-lib.mjs';

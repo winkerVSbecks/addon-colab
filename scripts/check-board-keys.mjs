@@ -2,7 +2,7 @@
 // - Clicking plain text in a story, then Backspace or Delete, does not remove its frame.
 // - Space on a focused button inside a story activates it (Page: "Log in" logs in).
 // - Space+drag still pans when the board itself has focus; a frame's title still removes with Delete.
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=.sb-6a/canvases node scripts/check-board-keys.mjs
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=<its canvas dir> node scripts/check-board-keys.mjs
 import { readFileSync } from 'node:fs';
 
 import { CANVAS_FILE, SB, boardState, check, done, launch, modelPoint, previewFrame, resetCanvas, setView, waitForBoard } from './board-lib.mjs';

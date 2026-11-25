@@ -2,7 +2,7 @@
 // 25 in dark mode). Every list row must receive the click meant for it, and a thread opened from
 // the list must sit above every pin. Also checked with a story rule that gives every button a high
 // z-index. Screenshots go to $OUT (default $TMPDIR).
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=.sb-7a/canvases node scripts/check-board-comments-list.mjs
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=<its canvas dir> node scripts/check-board-comments-list.mjs
 import { writeFileSync } from 'node:fs';
 
 import {

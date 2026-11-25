@@ -1,6 +1,6 @@
 // One zoom control on canvas pages (task 6a): Storybook's toolbar zoom is hidden there, its level is
 // reset so the preview is never left scaled, and it is back on story pages.
-// Run: SB=http://127.0.0.1:6170 CANVAS_DIR=.sb-6a/canvases node scripts/check-board-zoom.mjs
+// Run: SB=http://127.0.0.1:6170 CANVAS_DIR=<its canvas dir> node scripts/check-board-zoom.mjs
 import { SB, check, done, launch, previewFrame, resetCanvas, waitForBoard } from './board-lib.mjs';
 
 await resetCanvas();

@@ -1,6 +1,6 @@
 // A frame whose story no longer exists (task 6a): a short message with a Remove button and a
 // readable title, not Storybook's HMR error text.
-// Rewrites $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=.sb-6a/canvases node scripts/check-board-missing.mjs [screenshot.png]
+// Rewrites $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=<its canvas dir> node scripts/check-board-missing.mjs [screenshot.png]
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { BASE_CANVAS, CANVAS_FILE, SB, check, done, launch, previewFrame, setView } from './board-lib.mjs';

@@ -15,7 +15,6 @@ export default [
       'coverage/',
       'node_modules/',
       'storybook-static/',
-      'spike/',
       'build-storybook.log',
       '.DS_Store',
       '.env',

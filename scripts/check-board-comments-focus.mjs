@@ -3,7 +3,7 @@
 //   still goes away);
 // - opening a thread from the list moves focus into it; Escape closes it and focus returns to the
 //   list row; Escape with focus on the list also closes the open thread.
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=.sb-7a/canvases node scripts/check-board-comments-focus.mjs
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=<its canvas dir> node scripts/check-board-comments-focus.mjs
 import { writeFileSync } from 'node:fs';
 
 import {

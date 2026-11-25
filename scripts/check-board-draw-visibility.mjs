@@ -7,7 +7,7 @@
 // 2. Hostile story CSS: rules with id and :root selectors, !important, individual transforms and
 //    animations must not move, resize or hide the board canvas or the stroke layers.
 // Resets $CANVAS_DIR/board.json. Run:
-//   SB=http://127.0.0.1:6181 CANVAS_DIR=.sb-8a/canvases node scripts/check-board-draw-visibility.mjs
+//   SB=http://127.0.0.1:6181 CANVAS_DIR=<its canvas dir> node scripts/check-board-draw-visibility.mjs
 import { writeFileSync } from 'node:fs';
 import { inflateSync } from 'node:zlib';
 
@@ -149,7 +149,7 @@ for (const scheme of ['light', 'dark']) {
   await waitForStrokes(page);
   const shot = await page.screenshot();
   screenshots[scheme] = shot;
-  writeFileSync(new URL(`../.sb-8a/visibility-${scheme}.png`, import.meta.url), shot);
+  writeFileSync(`${process.env.OUT ?? process.env.TMPDIR ?? "/tmp"}/visibility-${scheme}.png`, shot);
   const after = pixels(shot);
 
   for (const [i, [name]] of COLORS.entries()) {

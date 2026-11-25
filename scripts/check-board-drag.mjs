@@ -4,7 +4,7 @@
 // - dragging does not navigate; clicking a row still opens the story; arrow keys + Enter still work;
 // - a collapsed component row is not a drag source and still expands on click;
 // - a canvas row cannot be dropped onto a canvas.
-// Resets .sb-task6/canvases/board.json first. Run: SB=http://127.0.0.1:6160 node scripts/check-board-drag.mjs
+// Resets $CANVAS_DIR/board.json first. Run: SB=http://127.0.0.1:6160 node scripts/check-board-drag.mjs
 import { CANVAS_FILE, SB, resetCanvas, boardState, check, done, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';
 
 await resetCanvas();

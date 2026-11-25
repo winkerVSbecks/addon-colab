@@ -1,7 +1,7 @@
 // Screenshots of comments on the board, light and dark: pins (user, agent, stacked, detached), an
 // open thread, the comment list, the hover highlight in comment mode, and the composer.
 // Writes PNGs to $OUT (default: ./comment-screenshots). Run:
-//   SB=http://127.0.0.1:6171 CANVAS_DIR=.sb-task7/canvases node scripts/comments-screenshots.mjs
+//   SB=http://127.0.0.1:6171 CANVAS_DIR=<its canvas dir> node scripts/comments-screenshots.mjs
 import { mkdirSync, writeFileSync } from 'node:fs';
 
 import { BASE_CANVAS, CANVAS_FILE, SB, launch, modelPoint, previewFrame, setView, waitForBoard } from './board-lib.mjs';

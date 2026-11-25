@@ -2,7 +2,7 @@
  * Keeps the board's `<canvas content="drawable">` the size of its container at the device pixel
  * ratio, and paints the frames with `drawElementImage` under the current viewport.
  *
- * Gotchas (see the spike findings): the context is scaled by the device pixel ratio, so every
+ * Gotchas: the context is scaled by the device pixel ratio, so every
  * `drawElementImage` call passes the element's CSS size explicitly (without it, Chrome draws at the
  * default size in device pixels and hit-testing disagrees with the pixels at DPR > 1). Drawing order
  * is hit-test order: the last frame drawn is on top.

@@ -6,3 +6,6 @@ build-storybook.log
 .env
 .eslintcache
 .impeccable/
+
+# Temporary Storybook configs and canvases used by checks
+.sb-*/

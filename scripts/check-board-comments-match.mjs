@@ -4,8 +4,8 @@
 // - pin "Row C" (a span, no role or name) and Row C's "Delete" (a name every row shares) in the
 //   check-only Rows story, prepend a row: both pins stay on Row C; reverse the list (a keyed
 //   reorder): both still on Row C.
-// Needs the check-only story in scripts/fixtures (a Storybook started with `-c .sb-7a`).
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=.sb-7a/canvases node scripts/check-board-comments-match.mjs
+// Needs the check-only story in scripts/fixtures (a Storybook started with `-c scripts/check-storybook`).
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=<its canvas dir> node scripts/check-board-comments-match.mjs
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
 import {

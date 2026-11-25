@@ -1,6 +1,6 @@
 // Zoom to fit includes comment pins (task 7a): a position comment at (-200, -150), outside every
 // frame, is on screen after Zoom to fit, and so are all frames.
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=.sb-7a/canvases node scripts/check-board-fit.mjs
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=<its canvas dir> node scripts/check-board-fit.mjs
 import { writeFileSync } from 'node:fs';
 
 import {

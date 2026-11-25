@@ -3,7 +3,7 @@
 //   logs in and the button goes, and comes back to the button when it logs out again;
 // - the comment UI keeps its text styles, pin size and list width when a story's global CSS
 //   (universal, tag and attribute rules) is on the page.
-// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6171 CANVAS_DIR=.sb-task7/canvases node scripts/check-board-comments-rerender.mjs
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6171 CANVAS_DIR=<its canvas dir> node scripts/check-board-comments-rerender.mjs
 import { readFileSync } from 'node:fs';
 
 import {

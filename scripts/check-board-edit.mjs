@@ -1,7 +1,7 @@
 // Moving, resizing and removing frames: instant locally, one write per gesture, no snap-back, no
 // story remount, persisted across reload; measured heights saved; remote (hand) edits show up;
 // removal tears the story down; overlapping frames hit-test the top one.
-// Resets $CANVAS_DIR/board.json (default .sb-task6/canvases). Run: SB=http://127.0.0.1:6160 node scripts/check-board-edit.mjs
+// Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6160 node scripts/check-board-edit.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { CANVAS_FILE, SB, resetCanvas, boardState, check, done, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';

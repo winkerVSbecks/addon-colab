@@ -1,5 +1,5 @@
 // A frame narrower than the minimum in the file is shown at the minimum width (task 6a).
-// Rewrites $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=.sb-6a/canvases node scripts/check-board-minsize.mjs
+// Rewrites $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=<its canvas dir> node scripts/check-board-minsize.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { BASE_CANVAS, CANVAS_FILE, SB, boardState, check, done, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';
