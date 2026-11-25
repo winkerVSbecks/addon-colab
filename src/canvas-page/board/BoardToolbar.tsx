@@ -12,7 +12,7 @@
  * outline and measure tools, `code/core/src/outline/OutlineSelector.tsx` and `code/core/src/measure/Tool.tsx`). It is shown once the
  * board offers more than one mode.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 
 import { Button, Separator, ToggleButton, Toolbar } from 'storybook/internal/components';
 import {
@@ -29,6 +29,7 @@ import { styled } from 'storybook/theming/emotion';
 import { type BoardMode, MODE_LABELS, MODE_SHORTCUTS } from '../../board/modes';
 import { MAX_ZOOM, MIN_ZOOM } from '../../board/viewport';
 import { storyCssShield } from './comment-ui';
+import { STORY_CSS_RESET_ATTRIBUTE, installStoryCssReset } from './story-css-reset';
 
 const MODE_ICONS: Record<BoardMode, React.ReactNode> = {
   select: <PointerDefaultIcon />,
@@ -67,6 +68,15 @@ const Floating = styled.div(({ theme }) => ({
   '& > *': { border: 'none' },
   // Story CSS shares this page (e.g. \`button { width: 100% }\`): keep Storybook's button sizes.
   ...storyCssShield,
+  // The reset makes children inherit type from here, so the container sets it (not the story).
+  '&&': {
+    fontFamily: theme.typography.fonts.base,
+    fontSize: theme.typography.size.s2 - 1,
+    lineHeight: 'normal',
+    letterSpacing: 'normal',
+    textTransform: 'none',
+    color: theme.color.defaultText,
+  },
 }));
 
 const Count = styled.span({ fontVariantNumeric: 'tabular-nums', marginLeft: 2 });
@@ -92,8 +102,9 @@ export function BoardToolbar({
   onToggleComments,
 }: BoardToolbarProps) {
   const percent = `${Math.round(zoom * 100)}%`;
+  useEffect(() => installStoryCssReset(), []);
   return (
-    <Floating data-colab-board-toolbar="">
+    <Floating data-colab-board-toolbar="" {...{ [STORY_CSS_RESET_ATTRIBUTE]: '' }}>
       <Toolbar aria-label="Canvas tools" innerStyle={{ gap: 2, paddingInline: 4 }}>
         {modes.length > 1 && (
           <>

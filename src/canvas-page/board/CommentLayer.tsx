@@ -27,6 +27,7 @@ import type { Size } from '../../board/viewport';
 import type { Comment } from '../../canvas-file';
 import { CommentList, LIST_WIDTH } from './CommentList';
 import { AuthorIcon, authorLabel, box, hardText, storyCssShield } from './comment-ui';
+import { STORY_CSS_RESET_ATTRIBUTE, installStoryCssReset } from './story-css-reset';
 import type { CommentLayerState, ShownPin } from './use-comments';
 
 /** Pins and cards sit above the mode layer (2) and below the toolbar and notice (3, later in the DOM). */
@@ -413,8 +414,11 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
 
   const close = () => state.setOpenId(null);
 
+  // Story CSS shares this page: reset it for the layer (see story-css-reset.ts).
+  useEffect(() => installStoryCssReset(), []);
+
   return (
-    <Layer data-colab-comments="">
+    <Layer data-colab-comments="" {...{ [STORY_CSS_RESET_ATTRIBUTE]: '' }}>
       <PinLayer data-colab-pins="">
         {pins.map((pin) => {
           if (!pin.screen) return null;
