@@ -263,11 +263,34 @@ describe('frames', () => {
     expect(raised.frame).toEqual(a);
     expect(raised.canvas.frames).toEqual([b, c, a]);
 
+    tick();
+    const before = await readCanvasText('board');
     const again = await store.raiseFrame({ canvasId: 'board', frameId: a.id });
     expect(again.canvas.updatedAt).toBe(raised.canvas.updatedAt);
     expect(again.canvas.frames).toEqual([b, c, a]);
+    expect(await readCanvasText('board')).toBe(before);
 
     await expectStoreError(store.raiseFrame({ canvasId: 'board', frameId: 'frame-x' }), 'NOT_FOUND');
+    await expectStoreError(
+      store.raiseFrame({ canvasId: 'board', frameId: undefined as unknown as string }),
+      'INVALID_INPUT',
+    );
+    await expectStoreError(store.raiseFrame({ canvasId: 'board', frameId: '' }), 'INVALID_INPUT');
+  });
+
+  it('raises once when the same frame is raised many times at once (rapid clicks)', async () => {
+    const add = (storyId: string) => store.addFrame({ canvasId: 'board', frame: { storyId, x: 0, y: 0, width: 100 } });
+    const a = (await add('s--a')).frame;
+    const b = (await add('s--b')).frame;
+    const writes: CanvasChangeEvent[] = [];
+    const unsubscribe = store.subscribe((event) => writes.push(event));
+    tick();
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => store.raiseFrame({ canvasId: 'board', frameId: a.id })),
+    );
+    unsubscribe();
+    expect(writes).toHaveLength(1);
+    expect(results.every((result) => result.canvas.frames.map((f) => f.id).join() === [b.id, a.id].join())).toBe(true);
   });
 
   it('rejects invalid frames and unknown ids', async () => {

@@ -220,7 +220,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
     {
       title: 'Resolve a comment',
       description:
-        'Marks a comment resolved (for example after fixing what it asked for). Resolving an already resolved comment updates its resolvedAt time. Returns the comment.',
+        'Marks a comment resolved (for example after fixing what it asked for). Resolving an already resolved comment changes nothing and keeps its original resolvedAt time. Returns the comment.',
       inputSchema: { canvasId, commentId: itemId.describe('Comment id from list_canvas_comments or get_canvas.') },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },

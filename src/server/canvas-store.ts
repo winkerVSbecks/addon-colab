@@ -176,6 +176,13 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
     }
   }
 
+  /** A frame, comment or stroke id argument: missing or not a string is the caller's mistake. */
+  function assertItemId(id: unknown, what: string): asserts id is string {
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new CanvasStoreError('INVALID_INPUT', `${what} must be a non-empty string`);
+    }
+  }
+
   async function readText(id: string): Promise<string | null> {
     try {
       return await readFile(pathOf(id), 'utf8');
@@ -234,13 +241,15 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
    */
   function mutate<R>(
     canvasId: string,
-    change: (canvas: CanvasFile) => { canvas: CanvasFile; result: R },
+    change: (canvas: CanvasFile) => { canvas: CanvasFile; result: R; unchanged?: boolean },
   ): Promise<{ canvas: CanvasFile; result: R }> {
     assertCanvasId(canvasId);
     return withLock(canvasId, async () => {
       for (let attempt = 0; attempt < MAX_COMMIT_ATTEMPTS; attempt++) {
         const { text, canvas } = await load(canvasId);
         const changed = change(structuredClone(canvas));
+        // Nothing to change: no write, no event, `updatedAt` stays.
+        if (changed.unchanged) return { canvas, result: changed.result };
         const next = finalize({ ...changed.canvas, updatedAt: now().toISOString() });
         const nextText = serializeCanvasFile(next);
         await options.beforeCommit?.(canvasId);
@@ -488,13 +497,13 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
 
     async raiseFrame({ canvasId, frameId }) {
       assertCanvasId(canvasId);
+      assertItemId(frameId, 'frameId');
       // Already on top: answer without a write, so selecting the top frame never touches the file.
-      const existing = (await load(canvasId)).canvas;
-      const top = existing.frames.at(-1);
-      if (top && top.id === frameId) return { canvas: existing, frame: top };
+      // Decided under the canvas lock, so rapid clicks cannot write an unchanged order.
       const { canvas, result } = await mutate(canvasId, (current) => {
         const index = findIndex(current.frames, frameId, 'frame', canvasId);
         const raised = current.frames[index]!;
+        if (index === current.frames.length - 1) return { canvas: current, result: raised, unchanged: true };
         return { canvas: { ...current, frames: [...current.frames.toSpliced(index, 1), raised] }, result: raised };
       });
       return { canvas, frame: result };
