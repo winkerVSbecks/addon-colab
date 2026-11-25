@@ -9,6 +9,8 @@
  * `{ id, success, error, payload }`, and every client filters responses by `id`. The server also
  * broadcasts `CANVAS_CHANGED` whenever a canvas changes, whoever changed it.
  */
+import type { Channel } from 'storybook/internal/channels';
+
 import type { CanvasFile, Comment, Frame, Reply, Stroke } from './canvas-file';
 import { ADDON_ID } from './constants';
 
@@ -151,11 +153,7 @@ export type CanvasResponse<Op extends CanvasOperation = CanvasOperation> =
   | { id: string; success: false; error: string; payload: CanvasErrorPayload };
 
 /** The part of a Storybook channel this module needs; manager, preview and server channels all fit. */
-export interface ChannelLike {
-  emit(event: string, ...args: unknown[]): void;
-  on(event: string, listener: (...args: never[]) => void): void;
-  off(event: string, listener: (...args: never[]) => void): void;
-}
+export type ChannelLike = Pick<Channel, 'emit' | 'on' | 'off'>;
 
 /** Rejection from `requestCanvas`: the server's message plus a `code` to branch on. */
 export class CanvasRequestError extends Error {

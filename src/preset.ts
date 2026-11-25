@@ -1,2 +1,40 @@
-// Node-side preset. Server features (canvas storage, MCP) are added here by later tasks.
-export {};
+// Node-side preset: canvas storage over Storybook's server channel. MCP (task 4) is added here too.
+import { isAbsolute, join, resolve } from 'node:path';
+
+import type { Options } from 'storybook/internal/types';
+
+import type { ChannelLike } from './channel';
+import { registerCanvasChannel } from './server/canvas-channel';
+import { getCanvasStore } from './server/canvas-store';
+
+/** Addon options, set in `.storybook/main` as `{ name: 'storybook-addon-colab', options: { canvasDir } }`. */
+export interface ColabAddonOptions {
+  /** Where canvas files live. Relative paths resolve against the project root. Default `<configDir>/canvases`. */
+  canvasDir?: string;
+}
+
+/** The canvas directory for these preset options. */
+export function canvasDirFor(options: Pick<Options, 'configDir'> & ColabAddonOptions): string {
+  if (options.canvasDir) {
+    return isAbsolute(options.canvasDir) ? options.canvasDir : resolve(process.cwd(), options.canvasDir);
+  }
+  return join(resolve(options.configDir), 'canvases');
+}
+
+// Same hook Storybook's core features (save story, create story, open in editor) use; dev server only.
+export const experimental_serverChannel = async <C extends ChannelLike>(
+  channel: C,
+  options: Options & ColabAddonOptions,
+): Promise<C> => {
+  const store = getCanvasStore({ dir: canvasDirFor(options) });
+  try {
+    await store.watch();
+  } catch (error) {
+    console.error(
+      `[addon-colab] cannot watch ${store.dir}; edits made outside Storybook will not show until reload`,
+      error,
+    );
+  }
+  registerCanvasChannel(channel, store);
+  return channel;
+};
