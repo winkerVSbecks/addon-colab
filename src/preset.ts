@@ -51,6 +51,7 @@ export const experimental_devServer = async <A extends DevServerApp>(
 };
 
 // Canvases as sidebar entries (task 5): one "Canvases" entry per canvas file, dev server only.
-export const { stories, experimental_indexers, viteFinal } = canvasEntryPresets<Options & ColabAddonOptions>(
+// `tags` keeps the canvas tags out of the sidebar's tag filter.
+export const { stories, experimental_indexers, viteFinal, tags } = canvasEntryPresets<Options & ColabAddonOptions>(
   canvasDirFor,
 );

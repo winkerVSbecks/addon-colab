@@ -205,6 +205,22 @@ export function canvasVitePlugin(dir: string): Plugin {
   };
 }
 
+/** Storybook's per-tag options (`tags` in main), as far as these hooks use them. */
+type TagsOptions = Record<string, { hideFromFilterPanel?: boolean } & Record<string, unknown>>;
+
+/**
+ * Keeps the canvas tags out of the sidebar's tag filter (they are how the addon recognises canvas
+ * entries, not something to filter by), using Storybook's `tags.<tag>.hideFromFilterPanel` option.
+ * A project's own options for these tags win.
+ */
+export function canvasTagOptions(existing: TagsOptions = {}): TagsOptions {
+  return {
+    ...existing,
+    [CANVAS_TAG]: { hideFromFilterPanel: true, ...existing[CANVAS_TAG] },
+    [INVALID_CANVAS_TAG]: { hideFromFilterPanel: true, ...existing[INVALID_CANVAS_TAG] },
+  };
+}
+
 /** Preset options these hooks read. */
 type CanvasPresetOptions = { configType?: 'DEVELOPMENT' | 'PRODUCTION' };
 
@@ -223,6 +239,7 @@ export function canvasEntryPresets<O extends CanvasPresetOptions>(dirFor: (optio
       createCanvasIndexer(dirFor(options), { published: options.configType === 'PRODUCTION' }),
       ...existing,
     ],
+    tags: async (existing: TagsOptions = {}): Promise<TagsOptions> => canvasTagOptions(existing),
     viteFinal: async <C extends { plugins?: unknown[] }>(config: C, options: O): Promise<C> => ({
       ...config,
       plugins: [...(config.plugins ?? []), canvasVitePlugin(dirFor(options))],

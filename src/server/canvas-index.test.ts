@@ -10,6 +10,7 @@ import { CANVAS_TAG, INVALID_CANVAS_TAG, canvasMetaId, canvasStoryId } from '../
 import {
   canvasCsfStub,
   canvasEntryPresets,
+  canvasTagOptions,
   canvasFilePattern,
   canvasVitePlugin,
   createCanvasIndexer,
@@ -188,5 +189,20 @@ describe('canvases that share a name', () => {
     expect((await index(first))[0]!.name).toBe('Board (board)');
     expect((await index(second))[0]!.name).toBe('board (board-2)');
     expect((await index(other))[0]!.name).toBe('Other');
+  });
+});
+
+describe('canvas tags in the sidebar filter', () => {
+  it('hides both canvas tags from the filter panel and keeps other tag options', async () => {
+    const options = await canvasEntryPresets(() => dir).tags({ beta: { defaultFilterSelection: 'exclude' } });
+    expect(options[CANVAS_TAG]).toEqual({ hideFromFilterPanel: true });
+    expect(options[INVALID_CANVAS_TAG]).toEqual({ hideFromFilterPanel: true });
+    expect(options.beta).toEqual({ defaultFilterSelection: 'exclude' });
+  });
+
+  it("lets the project's own options for a canvas tag win", () => {
+    expect(canvasTagOptions({ [CANVAS_TAG]: { hideFromFilterPanel: false } })[CANVAS_TAG]).toEqual({
+      hideFromFilterPanel: false,
+    });
   });
 });
