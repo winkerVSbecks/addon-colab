@@ -38,15 +38,26 @@ export class UndoStack {
   private undone: UndoEntry[] = [];
   private listeners = new Set<UndoListener>();
   private queue: Promise<unknown> = Promise.resolve();
+  private running = 0;
 
   constructor(private readonly limit = UNDO_LIMIT) {}
 
+  /**
+   * Whether ⌘Z should go to the stack: something to undo, or an undo/redo still running (its entry
+   * is off both stacks until it finishes; a ⌘Z pressed meanwhile is queued behind it).
+   */
   get canUndo(): boolean {
-    return this.done.length > 0;
+    return this.done.length > 0 || this.running > 0;
   }
 
+  /** Like `canUndo`, for ⇧⌘Z. */
   get canRedo(): boolean {
-    return this.undone.length > 0;
+    return this.undone.length > 0 || this.running > 0;
+  }
+
+  /** An undo or redo is still running. */
+  get busy(): boolean {
+    return this.running > 0;
   }
 
   /** The entry ⌘Z would undo next. */
@@ -142,7 +153,12 @@ export class UndoStack {
   }
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const next = this.queue.then(task, task);
+    this.running += 1;
+    this.emit();
+    const next = this.queue.then(task, task).finally(() => {
+      this.running -= 1;
+      this.emit();
+    });
     this.queue = next.catch(() => undefined);
     return next;
   }

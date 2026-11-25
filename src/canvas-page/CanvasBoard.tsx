@@ -298,8 +298,8 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
 
   const undoLatest = useCallback(
     (direction: 'undo' | 'redo') => {
-      const entry = direction === 'undo' ? undoStack.nextUndo : undoStack.nextRedo;
-      if (!entry) return;
+      // Nothing on the stack yet may still mean an undo/redo is running: the stack queues this one.
+      if (!(direction === 'undo' ? undoStack.canUndo : undoStack.canRedo)) return;
       void (direction === 'undo' ? undoStack.undo() : undoStack.redo()).then((done) => {
         if (done) setNotice({ message: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${done.label}`, tone: 'info' });
       });

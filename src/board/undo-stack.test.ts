@@ -133,4 +133,33 @@ describe('UndoStack', () => {
     stack.push(entry('b', []));
     expect(listener).not.toHaveBeenCalled();
   });
+
+  it('takes a ⌘Z pressed while a redo is still running, and runs it after the redo', async () => {
+    const log: string[] = [];
+    const stack = new UndoStack();
+    let release!: () => void;
+    stack.push({
+      label: 'a',
+      undo: () => log.push('undo a'),
+      redo: () =>
+        new Promise<void>((resolve) => {
+          release = () => {
+            log.push('redo a');
+            resolve();
+          };
+        }),
+    });
+    await stack.undo();
+    const redo = stack.redo();
+    await Promise.resolve();
+    // The entry is on neither stack while its redo runs, but ⌘Z must still reach the stack.
+    expect(stack.busy).toBe(true);
+    expect(stack.canUndo).toBe(true);
+    const undo = stack.undo();
+    release();
+    await Promise.all([redo, undo]);
+    expect(log).toEqual(['undo a', 'redo a', 'undo a']);
+    expect(stack.busy).toBe(false);
+    expect(stack.canUndo).toBe(false);
+  });
 });
