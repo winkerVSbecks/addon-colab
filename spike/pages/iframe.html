@@ -20,6 +20,7 @@
       const el = document.getElementById(id);
       try {
         if (geom === 'auto') { ctx.drawElementImage(el, x, y); continue; }
+        if (geom === 'sized') { ctx.drawElementImage(el, x, y, el.offsetWidth, el.offsetHeight); continue; }
         ctx.drawElementImage(el, x, y, { preserveElementGeometry: true });
         const css = new DOMMatrix().translate(view.panX, view.panY).scale(view.zoom).translate(x, y);
         const m = geom === 'grid' ? new DOMMatrix().scale(dpr).multiply(css) : css;

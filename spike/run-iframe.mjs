@@ -22,9 +22,13 @@ for (const zoom of [1, 1.5, 0.6]) {
       const fr = f.getBoundingClientRect();
       const { panX, panY, zoom } = window.view; const [px, py] = window.place[drawId];
       // expected screen point = pan + zoom * (place + offset of button inside drawable element)
-      const wrapR = document.getElementById(drawId).getBoundingClientRect();
-      const offX = (fr.left - wrapR.left) + br.left + br.width / 2, offY = (fr.top - wrapR.top) + br.top + br.height / 2;
-      return { expected: [panX + zoom * (px + offX), panY + zoom * (py + offY)], frameRect: [fr.left, fr.top, fr.width, fr.height], transform: t.toString(), before: f.contentWindow.log.length, paintErrors: window.paintErrors };
+      // Model-based expected point: uses layout offsets only (independent of the geometry we set).
+      const fOff = frameId === drawId ? [0, 0] : [f.offsetLeft + f.clientLeft, f.offsetTop + f.clientTop];
+      const offX = fOff[0] + br.left + br.width / 2, offY = fOff[1] + br.top + br.height / 2;
+      const ex = panX + zoom * (px + offX), ey = panY + zoom * (py + offY);
+      const cv = document.getElementById('c'); const d = devicePixelRatio;
+      const pixel = Array.from(cv.getContext('2d').getImageData(Math.round((panX + zoom * (px + fOff[0] + br.left + 6)) * d), Math.round((panY + zoom * (py + fOff[1] + br.top + 6)) * d), 1, 1).data);
+      return { expected: [ex, ey], pixelAtExpected: pixel, frameRect: [fr.left, fr.top, fr.width, fr.height], transform: t.toString(), before: f.contentWindow.log.length, paintErrors: window.paintErrors };
     }, [frameId, drawId]);
     const hit = await page.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el ? el.id || el.tagName : null; }, info.expected);
     await page.mouse.move(info.expected[0], info.expected[1]);
@@ -37,7 +41,7 @@ for (const zoom of [1, 1.5, 0.6]) {
 // typing into the iframe input (focus via click)
 await page.evaluate(() => window.setView({ zoom: 1 }));
 await page.waitForTimeout(100);
-const inpPt = await page.evaluate(() => { const f = document.getElementById('ifrA'); const r = f.contentDocument.getElementById('inp').getBoundingClientRect(); const fr = f.getBoundingClientRect(); const w = document.getElementById('wrap').getBoundingClientRect(); return [40 + 10 + (fr.left - w.left) + r.left + 10, 30 + 20 + (fr.top - w.top) + r.top + 5]; });
+const inpPt = await page.evaluate(() => { const f = document.getElementById('ifrA'); const r = f.contentDocument.getElementById('inp').getBoundingClientRect(); return [40 + 10 + f.offsetLeft + f.clientLeft + r.left + 10, 30 + 20 + f.offsetTop + f.clientTop + r.top + 5]; });
 await page.mouse.click(...inpPt); await page.keyboard.type('hello');
 await page.waitForTimeout(200);
 out.typing = await page.evaluate(() => document.getElementById('ifrA').contentWindow.log.slice(-1));
