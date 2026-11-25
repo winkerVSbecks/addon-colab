@@ -6,6 +6,7 @@ import { addons, types } from 'storybook/manager-api';
 import { type ChannelLike, onCanvasChanged } from './channel';
 import { ADDON_ID } from './constants';
 import { CanvasTool } from './manager/CanvasTool';
+import { installCanvasLayout } from './manager/layout';
 import { leaveCanvas, leaveRemovedCanvas } from './manager/navigation';
 
 const CANVAS_TOOL_ID = `${ADDON_ID}/canvases`;
@@ -15,6 +16,9 @@ const CANVAS_TOOL_ID = `${ADDON_ID}/canvases`;
  * server and no canvas entries, so the addon adds nothing to its manager.
  */
 const hasCanvasServer = (globalThis as { CONFIG_TYPE?: string }).CONFIG_TYPE !== 'PRODUCTION';
+
+// No addon panel on canvas pages: the board fills the preview.
+if (hasCanvasServer) installCanvasLayout(addons);
 
 addons.register(ADDON_ID, (api) => {
   if (!hasCanvasServer) return;

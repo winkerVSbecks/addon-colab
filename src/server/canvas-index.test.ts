@@ -121,7 +121,12 @@ describe('canvas CSF stub', () => {
       const mod = await import(/* @vite-ignore */ url);
       const [exportName] = Object.keys(mod).filter((key) => key !== 'default');
       expect(mod.default.id).toBe(canvasMetaId(fileId));
-      expect(mod.default.parameters).toEqual({ layout: 'fullscreen', colabCanvas: fileId });
+      expect(mod.default.parameters).toEqual({
+        layout: 'fullscreen',
+        colabCanvas: fileId,
+        controls: { disable: true },
+        actions: { disable: true },
+      });
       expect(toId(mod.default.id, exportName!)).toBe(canvasStoryId(fileId));
       expect(mod[exportName!].render()).toBeNull();
     }

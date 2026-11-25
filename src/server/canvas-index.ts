@@ -124,7 +124,14 @@ export function canvasCsfStub(fileId: string): string {
   const meta = {
     id: canvasMetaId(fileId),
     title: CANVAS_TITLE,
-    parameters: { layout: 'fullscreen', [CANVAS_PARAMETER]: fileId },
+    parameters: {
+      layout: 'fullscreen',
+      [CANVAS_PARAMETER]: fileId,
+      // A canvas has no args or actions. The manager hides the whole addon panel on canvas pages
+      // (`src/manager/layout.ts`); this also hides these two panels if a project replaces that.
+      controls: { disable: true },
+      actions: { disable: true },
+    },
   };
   return [
     `export default ${JSON.stringify(meta)};`,
