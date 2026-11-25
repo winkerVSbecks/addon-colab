@@ -49,10 +49,10 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
-    "@storybook/addon-docs": "next",
-    "@storybook/icons": "^2.0.0",
-    "@storybook/react-vite": "next",
-    "@types/node": "^20",
+    "@storybook/addon-docs": "11.0.0-rc.0",
+    "@storybook/icons": "2.2.0",
+    "@storybook/react-vite": "11.0.0-rc.0",
+    "@types/node": "^22.12.0",
     "@types/react": "^18.2.65",
     "@types/react-dom": "^18.2.21",
     "@vitejs/plugin-react": "^4.7.0",
@@ -60,12 +60,12 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.4",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-storybook": "next",
+    "eslint-plugin-storybook": "11.0.0-rc.0",
     "npm-run-all2": "^8.0.4",
     "prettier": "^3.6.2",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "storybook": "next",
+    "storybook": "11.0.0-rc.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.44.1",
@@ -73,7 +73,7 @@
     "vitest": "^5.1.2"
   },
   "peerDependencies": {
-    "storybook": "*"
+    "storybook": "^11.0.0-rc.0"
   },
   "publishConfig": {
     "access": "public"
