@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { STORY_INDEX_INVALIDATED } from 'storybook/internal/core-events';
+import { STORY_CHANGED, STORY_INDEX_INVALIDATED, STORY_SPECIFIED } from 'storybook/internal/core-events';
 import { addons, types } from 'storybook/manager-api';
 
 import { type ChannelLike, onCanvasChanged } from './channel';
@@ -8,7 +8,7 @@ import { ADDON_ID } from './constants';
 import { CanvasTool } from './manager/CanvasTool';
 import { registerBoard } from './manager/board';
 import { trackBrokenCanvases } from './manager/broken-status';
-import { installCanvasLayout } from './manager/layout';
+import { hideZoomOnCanvases, installCanvasLayout } from './manager/layout';
 import { leaveCanvas, leaveRemovedCanvas } from './manager/navigation';
 import { installManagerTheme } from './manager/theme';
 
@@ -45,6 +45,9 @@ addons.register(ADDON_ID, (api) => {
     if (event.type === 'deleted') void leaveCanvas(api, event.id);
   });
   channel.on(STORY_INDEX_INVALIDATED, () => void leaveRemovedCanvas(api));
+
+  // One zoom control on canvas pages (the board's): Storybook's is hidden there and reset to 100%.
+  hideZoomOnCanvases(api, addons, [STORY_CHANGED, STORY_SPECIFIED]);
 
   // Canvas board (task 6): drag stories from the sidebar, and "Add to canvas" in the toolbar.
   registerBoard(api);

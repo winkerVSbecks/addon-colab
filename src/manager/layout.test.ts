@@ -1,7 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { canvasStoryId } from '../canvas-entry';
-import { hidePanelOnCanvases, installCanvasLayout, isShowingCanvas } from './layout';
+import {
+  ZOOM_RESET_SHORTCUT,
+  hidePanelOnCanvases,
+  installCanvasLayout,
+  isShowingCanvas,
+  ZOOM_TOOL_ID,
+  hideZoomOnCanvases,
+  resetStorybookZoom,
+} from './layout';
 
 type State = Parameters<ReturnType<typeof hidePanelOnCanvases>>[0];
 
@@ -34,5 +42,83 @@ describe('addon panel on canvas pages', () => {
     });
     expect(config.layoutCustomisations!.showSidebar).toBe(showSidebar);
     expect(typeof config.layoutCustomisations!.showPanel).toBe('function');
+  });
+});
+
+describe("Storybook's own zoom on canvas pages", () => {
+  it("is reset through the zoom tool's shortcut, and tolerates the shortcut being absent", () => {
+    const action = vi.fn();
+    expect(resetStorybookZoom({ getAddonsShortcuts: () => ({ [ZOOM_RESET_SHORTCUT]: { action } }) })).toBe(true);
+    expect(action).toHaveBeenCalledTimes(1);
+    expect(resetStorybookZoom({ getAddonsShortcuts: () => ({}) })).toBe(false);
+    expect(
+      resetStorybookZoom({
+        getAddonsShortcuts: () => {
+          throw new Error('not ready');
+        },
+      }),
+    ).toBe(false);
+  });
+
+  function setup(initialStoryId: string | undefined, toolbar?: Record<string, { hidden?: boolean; title?: string }>) {
+    const action = vi.fn();
+    const listeners = new Map<string, (storyId?: unknown) => void>();
+    const config: { toolbar?: Record<string, { hidden?: boolean }> } = { toolbar };
+    const setConfig = vi.fn((next: typeof config) => void Object.assign(config, next));
+    let current = initialStoryId;
+    hideZoomOnCanvases(
+      {
+        getAddonsShortcuts: () => ({ [ZOOM_RESET_SHORTCUT]: { action } }),
+        on: (event, listener) => listeners.set(event, listener),
+        getUrlState: () => ({ storyId: current }),
+      },
+      { getConfig: () => config, setConfig },
+      ['storyChanged', 'storySpecified'],
+    );
+    return {
+      action,
+      config,
+      setConfig,
+      listeners,
+      go: (storyId: string, event = 'storyChanged', withId = true) => {
+        current = storyId;
+        listeners.get(event)!(withId ? storyId : { storyId });
+      },
+    };
+  }
+
+  it('is hidden and reset while a canvas is open, and comes back on a story', () => {
+    const t = setup('example-button--primary');
+    expect([...t.listeners.keys()]).toEqual(['storyChanged', 'storySpecified']);
+    expect(t.setConfig).not.toHaveBeenCalled();
+    expect(t.action).not.toHaveBeenCalled();
+
+    t.go(canvasId);
+    expect(t.config.toolbar![ZOOM_TOOL_ID]).toEqual({ hidden: true });
+    expect(t.action).toHaveBeenCalledTimes(1);
+
+    // Another canvas: still hidden, no extra config write, zoom reset again.
+    t.go(canvasStoryId('other'));
+    expect(t.setConfig).toHaveBeenCalledTimes(1);
+    expect(t.action).toHaveBeenCalledTimes(2);
+
+    t.go('example-button--primary');
+    expect(t.config.toolbar![ZOOM_TOOL_ID]).toEqual({ hidden: false });
+    expect(t.action).toHaveBeenCalledTimes(2);
+  });
+
+  it('is hidden when the page opens on a canvas, and reads the URL when the event has no story id', () => {
+    const t = setup(canvasId);
+    expect(t.config.toolbar![ZOOM_TOOL_ID]).toEqual({ hidden: true });
+    t.go('example-button--primary', 'storySpecified', false);
+    expect(t.config.toolbar![ZOOM_TOOL_ID]).toEqual({ hidden: false });
+  });
+
+  it("keeps the project's own toolbar options", () => {
+    const t = setup('example-button--primary', { zoom: { hidden: true, title: 'Zoom' }, remount: { hidden: true } });
+    t.go(canvasId);
+    t.go('example-button--primary');
+    // The project had hidden zoom itself: it stays hidden after leaving the canvas.
+    expect(t.config.toolbar).toEqual({ zoom: { hidden: true, title: 'Zoom' }, remount: { hidden: true } });
   });
 });
