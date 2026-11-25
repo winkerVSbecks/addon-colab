@@ -6,6 +6,7 @@ import { addons, types } from 'storybook/manager-api';
 import { type ChannelLike, onCanvasChanged } from './channel';
 import { ADDON_ID } from './constants';
 import { CanvasTool } from './manager/CanvasTool';
+import { trackBrokenCanvases } from './manager/broken-status';
 import { installCanvasLayout } from './manager/layout';
 import { leaveCanvas, leaveRemovedCanvas } from './manager/navigation';
 import { installManagerTheme } from './manager/theme';
@@ -37,6 +38,8 @@ addons.register(ADDON_ID, (api) => {
   const channel = addons.getChannel();
   // Canvas pages follow the manager's theme, not the system colour scheme.
   installManagerTheme(channel as ChannelLike);
+  // A warning icon on broken canvas files in the sidebar.
+  trackBrokenCanvases(channel as ChannelLike);
   onCanvasChanged(channel as ChannelLike, (event) => {
     if (event.type === 'deleted') void leaveCanvas(api, event.id);
   });
