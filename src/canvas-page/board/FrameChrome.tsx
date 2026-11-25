@@ -14,6 +14,7 @@ import { Button } from 'storybook/internal/components';
 import { CloseIcon, ShareAltIcon } from '@storybook/icons';
 import { styled } from 'storybook/theming/emotion';
 
+import { titleKeyAction } from '../../board/keyboard';
 import type { Rect } from '../../board/viewport';
 
 export type ResizeEdge = 'e' | 's' | 'se';
@@ -143,7 +144,11 @@ function useGesture(handlers: () => GestureHandlers | undefined, onPress?: () =>
       const element = event.currentTarget as HTMLElement;
       // A pointer press shows no focus ring (`focusVisible: false`); Tab still does.
       if (element.tabIndex >= 0) element.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
-      else (element.closest('[data-colab-board]') as HTMLElement | null)?.focus({ preventScroll: true });
+      else {
+        // A resize handle: focus the frame's title, the one place whose Delete removes the frame.
+        const title = element.closest('[data-colab-chrome]')?.querySelector<HTMLElement>('[data-colab-frame-title]');
+        title?.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
+      }
       onPress?.();
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
       state.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, handlers: current };
@@ -204,25 +209,15 @@ export function FrameChrome({
   const titleGesture = useGesture(() => move, onSelect);
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    const step = event.shiftKey ? 10 : 1;
-    const nudges: Record<string, [number, number]> = {
-      ArrowLeft: [-step, 0],
-      ArrowRight: [step, 0],
-      ArrowUp: [0, -step],
-      ArrowDown: [0, step],
-    };
-    const nudge = nudges[event.key];
-    if (nudge) {
-      event.preventDefault();
-      onSelect();
-      onNudge(nudge[0], nudge[1]);
-    } else if (event.key === 'Delete' || event.key === 'Backspace') {
-      event.preventDefault();
+    const action = titleKeyAction(event);
+    if (!action) return;
+    event.preventDefault();
+    if (action.type === 'remove') {
       onRemove();
-    } else if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      onSelect();
+      return;
     }
+    onSelect();
+    if (action.type === 'nudge') onNudge(action.dx, action.dy);
   };
 
   return (

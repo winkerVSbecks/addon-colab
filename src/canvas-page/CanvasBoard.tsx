@@ -10,6 +10,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { SELECT_STORY, STORY_UNCHANGED } from 'storybook/internal/core-events';
 import { styled, useTheme } from 'storybook/theming/emotion';
 
+import { boardKeyAction, focusPlace } from '../board/keyboard';
 import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect } from '../board/frame-defaults';
 import { boundsOf, worldRectToScreen } from '../board/viewport';
 import type { CanvasFile } from '../canvas-file';
@@ -23,7 +24,7 @@ import { type StoryStatus, getPreview } from './board/story-mount';
 import { useBoardView } from './board/use-board-view';
 import { type PaintScene, useDrawableCanvas } from './board/use-drawable-canvas';
 import { useFrameEdits } from './board/use-frame-edits';
-import { isEditable, usePanZoom } from './board/use-pan-zoom';
+import { usePanZoom } from './board/use-pan-zoom';
 import { useStoryDrop } from './board/use-story-drop';
 
 export interface CanvasBoardProps {
@@ -152,23 +153,17 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   }, [frames, selectedId]);
 
   const remove = edits.remove;
-  // Delete/Backspace removes the selected frame and Escape deselects, unless the key is meant for a
-  // story (typing in it) or was handled by a frame's title.
+  // Escape deselects when focus is on the board. Delete/Backspace are handled only by a frame's
+  // title (FrameChrome): a press inside a story leaves focus on the board root or in the story, and
+  // must never remove the frame (src/board/keyboard.ts).
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !selectedId) return;
-      const active = document.activeElement;
-      if (isEditable(active) || active?.closest('[data-colab-frame]')) return;
-      if (event.key === 'Delete' || event.key === 'Backspace') {
-        event.preventDefault();
-        remove(selectedId);
-      } else if (event.key === 'Escape') {
-        setSelectedId(null);
-      }
+      const place = focusPlace(document.activeElement);
+      if (boardKeyAction(event, place, { hasSelection: selectedId !== null }) === 'deselect') setSelectedId(null);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedId, remove]);
+  }, [selectedId]);
 
   const onElement = useCallback((frameId: string, element: HTMLDivElement | null) => {
     if (element) elementsRef.current.set(frameId, element);
