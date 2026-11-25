@@ -377,6 +377,57 @@ describe('strokes', () => {
     expect(canvas.strokes).toEqual([]);
     await expectStoreError(store.removeStroke({ canvasId: 'board', strokeId: stroke.id }), 'NOT_FOUND');
   });
+
+  it('restores strokes with their ids at an index, skipping ones already there', async () => {
+    await store.create({ name: 'Board' });
+    const add = async (x: number) =>
+      (await store.addStroke({ canvasId: 'board', stroke: { color: '#f00', width: 2, points: [[x, 0]] } })).stroke;
+    const a = await add(1);
+    const b = await add(2);
+    const c = await add(3);
+    await store.removeStroke({ canvasId: 'board', strokeId: b.id });
+
+    const restored = await store.restoreStrokes({ canvasId: 'board', strokes: [b], index: 1 });
+    expect(restored.strokes).toEqual([b]);
+    expect(restored.canvas.strokes).toEqual([a, b, c]);
+    expect((await store.get({ id: 'board' })).strokes).toEqual([a, b, c]);
+
+    // Already there: nothing is written.
+    const again = await store.restoreStrokes({ canvasId: 'board', strokes: [b, b] });
+    expect(again.strokes).toEqual([]);
+    expect(again.canvas.updatedAt).toBe(restored.canvas.updatedAt);
+
+    // Without an index (or past the end) they go last; duplicates in the input count once.
+    await store.removeStroke({ canvasId: 'board', strokeId: a.id });
+    const last = await store.restoreStrokes({ canvasId: 'board', strokes: [a, a, c], index: 99 });
+    expect(last.strokes).toEqual([a]);
+    expect(last.canvas.strokes).toEqual([b, c, a]);
+
+    await expectStoreError(
+      store.restoreStrokes({ canvasId: 'board', strokes: [{ ...a, id: 'stroke-new', points: [] }] }),
+      'INVALID_INPUT',
+    );
+    await expectStoreError(store.restoreStrokes({ canvasId: 'board', strokes: [a], index: -1 }), 'INVALID_INPUT');
+    await expectStoreError(store.restoreStrokes({ canvasId: 'nope', strokes: [a] }), 'NOT_FOUND');
+  });
+
+  it('clears all strokes and returns them, so a clear can be undone', async () => {
+    await store.create({ name: 'Board' });
+    const a = (await store.addStroke({ canvasId: 'board', stroke: { color: '#f00', width: 2, points: [[0, 0]] } }))
+      .stroke;
+    const b = (await store.addStroke({ canvasId: 'board', stroke: { color: '#00f', width: 4, points: [[1, 1]] } }))
+      .stroke;
+    const cleared = await store.clearStrokes({ canvasId: 'board' });
+    expect(cleared.strokes).toEqual([a, b]);
+    expect(cleared.canvas.strokes).toEqual([]);
+
+    const empty = await store.clearStrokes({ canvasId: 'board' });
+    expect(empty.strokes).toEqual([]);
+    expect(empty.canvas.updatedAt).toBe(cleared.canvas.updatedAt);
+
+    const back = await store.restoreStrokes({ canvasId: 'board', strokes: cleared.strokes, index: 0 });
+    expect(back.canvas.strokes).toEqual([a, b]);
+  });
 });
 
 describe('invalid files', () => {

@@ -27,6 +27,7 @@ import {
   createCanvasFile,
   createId,
   frameSchema,
+  strokeSchema,
   isCanvasId,
   parseCanvasFile,
   pointSchema,
@@ -572,6 +573,43 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
         return { canvas: { ...current, strokes: current.strokes.filter((s) => s.id !== strokeId) }, result: null };
       });
       return { canvas };
+    },
+
+    async restoreStrokes({ canvasId, strokes, index }) {
+      const input = parseInput(z.array(strokeSchema), strokes, 'strokes');
+      const at = index === undefined ? undefined : parseInput(z.number().int().min(0), index, 'index');
+      assertCanvasId(canvasId);
+      // Nothing to put back (a repeated undo): answer without a write.
+      const existing = (await load(canvasId)).canvas;
+      const missing = (canvas: CanvasFile) => {
+        const present = new Set(canvas.strokes.map((s) => s.id));
+        return input.filter((s) => {
+          if (present.has(s.id)) return false;
+          present.add(s.id);
+          return true;
+        });
+      };
+      if (missing(existing).length === 0) return { canvas: existing, strokes: [] };
+      const { canvas, result } = await mutate(canvasId, (current) => {
+        const restored = missing(current);
+        const position = Math.min(at ?? current.strokes.length, current.strokes.length);
+        return {
+          canvas: { ...current, strokes: current.strokes.toSpliced(position, 0, ...restored) },
+          result: restored,
+        };
+      });
+      return { canvas, strokes: result };
+    },
+
+    async clearStrokes({ canvasId }) {
+      assertCanvasId(canvasId);
+      const existing = (await load(canvasId)).canvas;
+      if (existing.strokes.length === 0) return { canvas: existing, strokes: [] };
+      const { canvas, result } = await mutate(canvasId, (current) => ({
+        canvas: { ...current, strokes: [] },
+        result: current.strokes,
+      }));
+      return { canvas, strokes: result };
     },
   };
 
