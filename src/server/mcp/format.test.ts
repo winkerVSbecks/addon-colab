@@ -18,11 +18,13 @@ describe('describeAnchor', () => {
 
   it("passes on the row's text for an element in a repeated row", () => {
     const location = describeAnchor(
-      { type: 'element', frameId: 'frame-a', target: { ...target, context: 'Row C Delete' } },
+      { type: 'element', frameId: 'frame-a', target: { ...target, context: 'Row C Delete', lookAlikes: 4 } },
       canvas,
       () => undefined,
     );
     expect(location).toMatchObject({ type: 'element', name: 'Delete', context: 'Row C Delete' });
+    // The look-alike count is for the board's pin matching only.
+    expect(location).not.toHaveProperty('lookAlikes');
   });
 
   it('leaves context out when the target has none', () => {

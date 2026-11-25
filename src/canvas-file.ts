@@ -52,10 +52,18 @@ export const elementTargetSchema = z.object({
   /** Accessible name, when one can be computed. */
   name: z.string().min(1).optional(),
   /**
-   * Text of the element's row (list item, table row, card) when other elements in the story look
-   * the same, such as each row's "Delete" button; tells them apart. Absent otherwise.
+   * Text of the element's row (list item, table row, card, or any ancestor that only it had) when
+   * other elements in the story look the same, such as each row's "Delete" button; tells them apart.
+   * Absent otherwise.
    */
   context: z.string().min(1).max(300).optional(),
+  /**
+   * How many elements in the story looked the same (same role and name, or same tag and text,
+   * this one included) when the comment was made. Present only when there was more than one, so
+   * the board can tell "this element was unique" from "it had look-alikes and nothing but its
+   * position told them apart". Absent in files written before it existed.
+   */
+  lookAlikes: z.number().int().min(2).max(100000).optional(),
 });
 
 /**

@@ -15,10 +15,11 @@
  * 7. a structural path (`tag:nth-of-type(n)` steps), as short as it can be while unique, anchored
  *    at the root with `:scope >` only when it has to be.
  *
- * Role, accessible name, text and (for look-alikes in repeated rows) the row's text are stored next
- * to the selector. `resolveTarget` only accepts an element that shows it is the same one; when the
- * selector's element does not, it searches the story for the one that does, and otherwise the pin
- * falls back to its frame and is shown as detached. A wrong element is worse than a detached pin.
+ * Role, accessible name, text and, when other elements look the same, how many did and the text
+ * that told this one apart are stored next to the selector. `resolveTarget` attaches a pin only
+ * with positive evidence that it is the pinned element and not one of its look-alikes (the rule is
+ * stated there); otherwise the pin falls back to its frame and is shown as detached. A wrong
+ * element is worse than a detached pin.
  *
  * Works on any DOM (the preview page, or happy-dom in tests). No React.
  */
@@ -473,7 +474,10 @@ export function htmlSnippet(element: Element, max = MAX_TEXT): string {
 // Identity: is this the same element?
 
 /** What a target stores about an element's identity (the rest of `ElementTarget` is about its story). */
-export type TargetIdentity = Pick<ElementTarget, 'selector' | 'html' | 'text' | 'role' | 'name' | 'context'>;
+export type TargetIdentity = Pick<
+  ElementTarget,
+  'selector' | 'html' | 'text' | 'role' | 'name' | 'context' | 'lookAlikes'
+>;
 
 const MAX_CONTEXT = 300;
 
@@ -490,8 +494,8 @@ function openingTag(html: string): string {
 
 /**
  * Whether `element` has the stored identity: the same role, and the same accessible name; without
- * a name, the same tag and text; without text either, the same opening tag. The repeat context is
- * not part of this (see `repeatContext`).
+ * a name, the same tag and text; without text either, the same opening tag. Context and look-alikes are
+ * not part of this (see `resolveTarget`).
  */
 export function hasIdentity(element: Element, target: Omit<TargetIdentity, 'selector'>): boolean {
   if (target.role && roleOf(element) !== target.role) return false;
@@ -510,20 +514,39 @@ function spacedText(element: Element): string {
   return parts.join(' ').replace(/\s+/g, ' ').trim();
 }
 
-/**
- * Text that tells an element in a repeated row or list item apart from its look-alikes (the
- * "Delete" button of each row): the text of the nearest ancestor that has a sibling with the same
- * tag (the row, list item or card) and says more than the element itself.
- */
-export function repeatContext(element: Element, root: Element): string | undefined {
-  const own = spacedText(element);
+/** The context text of each ancestor of `element` below `root`, nearest first (memoised per call). */
+function ancestorTexts(element: Element, root: Element, memo: Map<Element, string>): string[] {
+  const texts: string[] = [];
   for (let ancestor = element.parentElement; ancestor && ancestor !== root; ancestor = ancestor.parentElement) {
-    const parent = ancestor.parentElement;
-    if (!parent) break;
-    const repeated = [...parent.children].some((child) => child !== ancestor && child.tagName === ancestor.tagName);
-    if (!repeated) continue;
-    const text = spacedText(ancestor);
-    if (text && text !== own) return clip(text, MAX_CONTEXT);
+    let text = memo.get(ancestor);
+    if (text === undefined) {
+      text = clip(spacedText(ancestor), MAX_CONTEXT);
+      memo.set(ancestor, text);
+    }
+    if (text) texts.push(text);
+  }
+  return texts;
+}
+
+/** Whether `element` sits inside an ancestor (below `root`) whose text is `context`. */
+function inContext(element: Element, root: Element, context: string, memo: Map<Element, string>): boolean {
+  return ancestorTexts(element, root, memo).includes(context);
+}
+
+/**
+ * Text that tells `element` apart from `lookAlikes` (the other elements with its identity, such as
+ * the "Delete" button of each row, or a "Save" in a header and another in a footer): the text of
+ * its nearest ancestor that no look-alike is inside, so that `inContext` is true for the element
+ * and false for every look-alike. Undefined when no ancestor does that (two "Save" buttons side by
+ * side in one toolbar).
+ */
+export function distinguishingContext(element: Element, root: Element, lookAlikes: Element[]): string | undefined {
+  const memo = new Map<Element, string>();
+  const others = lookAlikes.filter((other) => other !== element);
+  const own = clip(spacedText(element), MAX_CONTEXT);
+  for (const text of ancestorTexts(element, root, memo)) {
+    if (text === own) continue;
+    if (others.every((other) => !inContext(other, root, text, memo))) return text;
   }
   return undefined;
 }
@@ -535,11 +558,22 @@ function elementsWithIdentity(root: Element, target: Omit<TargetIdentity, 'selec
 const TEST_ID_SELECTOR = new RegExp(
   `^\\[(?:${TEST_ID_ATTRIBUTES.join('|')})=(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\]$`,
 );
-const ID_SELECTOR = /^#(?:[\w\u0080-\uffff-]|\\[0-9a-f]{1,6} ?|\\.)+$/i;
+const ID_SELECTOR = /^#(?:[\w\u0080-￿-]|\\[0-9a-f]{1,6} ?|\\.)+$/i;
 
 /** Whether a selector is a test id or a hand-written id on its own: it names one element on purpose. */
 export function isIdentitySelector(selector: string): boolean {
   return TEST_ID_SELECTOR.test(selector) || ID_SELECTOR.test(selector);
+}
+
+/**
+ * Whether a selector picks its element by where it is rather than by what it is: a structural path
+ * (`:nth-of-type`, `:scope >`) or bare tags. Such a selector only tells look-alikes apart while
+ * none of them is added or removed. A selector with a class, attribute or id names a property of
+ * the element itself.
+ */
+export function isPositionalSelector(selector: string): boolean {
+  if (/:nth-of-type\(|:scope\b/.test(selector)) return true;
+  return !/[.#[]/.test(selector);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -547,8 +581,9 @@ export function isIdentitySelector(selector: string): boolean {
 
 /**
  * Everything a comment stores about an element (`ElementTarget`). When other elements in the story
- * look the same (same role, name or text, like each row's "Delete"), `context` holds the text of
- * its row so it can be told apart later.
+ * look the same (same role and name, or tag and text, like each row's "Delete"), `lookAlikes`
+ * records how many there were, and `context` holds the text of the nearest ancestor that only this
+ * one is inside (see `distinguishingContext`), when there is one.
  */
 export function describeElement(element: Element, root: Element, story: TargetStory): ElementTarget {
   const target: ElementTarget = {
@@ -563,8 +598,10 @@ export function describeElement(element: Element, root: Element, story: TargetSt
   if (role) target.role = role;
   const name = accessibleName(element);
   if (name) target.name = name;
-  if (elementsWithIdentity(root, target).length > 1) {
-    const context = repeatContext(element, root);
+  const lookAlikes = elementsWithIdentity(root, target);
+  if (lookAlikes.length > 1) {
+    target.lookAlikes = lookAlikes.length;
+    const context = distinguishingContext(element, root, lookAlikes);
     if (context) target.context = context;
   }
   return target;
@@ -575,37 +612,50 @@ export type ResolvedTarget =
   | { kind: 'detached' };
 
 /**
- * Finds a target's element in the story root again. A wrong element is worse than none, so the
- * element must show it is the same one:
- * - it has the stored identity (`hasIdentity`: role and name, else tag and text);
- * - when other elements share that identity, it is in the stored row (`context`); without a stored
- *   context, the selector's position is all there is to go on.
+ * THE RULE. A pin attaches to an element only with positive evidence that it is the pinned element
+ * and not one of the look-alikes that existed when it was pinned; in doubt it detaches.
  *
- * Order:
- * 1. the selector's element, when it passes those checks;
- * 2. a test-id or hand-written-id selector's element even when its name or text changed (the
- *    author named that element, so a renamed button is still the one the comment is about);
- * 3. the one element in the story that passes the checks (the markup changed, or a list was
- *    reordered and the selector's position now holds a different row), when the target has a
- *    name or text to look for;
- * otherwise detached: the pin falls back to its frame. So a class or structural selector does not
- * follow a rename ("Log in" edited to "Sign in" detaches), and "Log in" never moves onto the
- * "Log out" button that replaced it.
+ * Evidence, derived from that rule:
+ * - **Identity** (`hasIdentity`: same role and name, else tag and text) is always required. It is
+ *   enough on its own only when the element had no look-alikes when pinned (no `lookAlikes`).
+ * - **Context**: when look-alikes existed and an ancestor's text told the element apart, the
+ *   element must still be inside an ancestor with that text, however many look-alikes are left
+ *   (filtering a list down to Row D does not make Row D's "Delete" Row C's).
+ * - **Selector**: when look-alikes existed and nothing but the selector told them apart, only the
+ *   selector's element can be the one, never one found by searching. A positional selector
+ *   (`button:nth-of-type(1)`) only counts while the number of look-alikes is what it was: once one
+ *   is removed or added, the position may now hold a different one. A class, attribute or id
+ *   selector names the element itself and counts as long as it matches it.
+ * - **Author id**: a test-id or hand-written `#id` selector names the element on purpose, so its
+ *   element is accepted even when renamed (by design, also if the id is reused).
+ *
+ * Order: (1) the selector's element if it has the evidence; (2) a test-id / `#id` selector's
+ * element; (3) the one element in the story that has the evidence, when the evidence is a name,
+ * text or context (not a position); otherwise detached. Targets saved before `lookAlikes` existed
+ * are treated as having had no look-alikes unless they carry a `context`.
  */
 export function resolveTarget(root: Element, target: TargetIdentity): ResolvedTarget {
+  const memo = new Map<Element, string>();
   const bySelector = queryUnique(root, target.selector);
   const lookAlikes = elementsWithIdentity(root, target);
-  const inRow = (element: Element) =>
-    target.context === undefined || lookAlikes.length <= 1 || repeatContext(element, root) === target.context;
+  const { context } = target;
+  const hadLookAlikes = context !== undefined || (target.lookAlikes ?? 1) > 1;
 
-  if (bySelector && lookAlikes.includes(bySelector) && inRow(bySelector)) {
-    return { kind: 'found', element: bySelector, by: 'selector' };
-  }
+  const hasEvidence = (element: Element, viaSelector: boolean): boolean => {
+    if (!lookAlikes.includes(element)) return false;
+    if (context !== undefined) return inContext(element, root, context, memo);
+    if (!hadLookAlikes) return true;
+    // Look-alikes and no context: only the selector's own element, and a position only while the set is unchanged.
+    if (!viaSelector) return false;
+    return !isPositionalSelector(target.selector) || lookAlikes.length === target.lookAlikes;
+  };
+
+  if (bySelector && hasEvidence(bySelector, true)) return { kind: 'found', element: bySelector, by: 'selector' };
   if (bySelector && isIdentitySelector(target.selector)) return { kind: 'found', element: bySelector, by: 'id' };
 
-  // With neither a name nor text, look-alikes elsewhere are no evidence: only the selector's position counts.
-  if (!target.name && !target.text) return { kind: 'detached' };
-  const candidates = target.context === undefined ? lookAlikes : lookAlikes.filter(inRow);
+  // With neither a name, text nor context, a look-alike elsewhere is no evidence: only the selector counts.
+  if (!target.name && !target.text && context === undefined) return { kind: 'detached' };
+  const candidates = lookAlikes.filter((element) => hasEvidence(element, false));
   const [only] = candidates;
   if (only && candidates.length === 1) return { kind: 'found', element: only, by: 'search' };
   return { kind: 'detached' };

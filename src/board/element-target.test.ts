@@ -421,3 +421,419 @@ describe('resolveTarget', () => {
     expect(resolveTarget(root, target)).toEqual({ kind: 'detached' });
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// The rule, case by case. A pin attaches only with positive evidence that it is the pinned element
+// and not one of the look-alikes that existed when it was pinned; in doubt it detaches. Each row:
+// the story, the element pinned, what changes, and the element the pin must be on afterwards
+// (null = detached). Never another element.
+
+/** The `<li>` of a row by its label (`rows()` markup). */
+function row(root: Element, label: string): Element | null {
+  return [...root.querySelectorAll('li')].find((li) => li.querySelector('span')?.textContent === label) ?? null;
+}
+const rowLabel = (root: Element, label: string) => row(root, label)?.querySelector('span') ?? null;
+const rowDelete = (root: Element, label: string) => row(root, label)?.querySelector('button') ?? null;
+const keepRows = (root: Element, labels: string[]) => {
+  for (const li of [...root.querySelectorAll('li')]) {
+    if (!labels.includes(li.querySelector('span')?.textContent ?? '')) li.remove();
+  }
+};
+/** React without keys: the same `<li>` nodes stay, their contents are rewritten. */
+const unkeyedReverse = (root: Element) => {
+  const spans = [...root.querySelectorAll('li > span')];
+  const labels = spans.map((span) => span.textContent).reverse();
+  spans.forEach((span, index) => (span.textContent = labels[index] ?? ''));
+};
+const keyedReverse = (root: Element) => {
+  const ul = q(root, 'ul');
+  for (const li of [...ul.children].reverse()) ul.append(li);
+};
+const byText = (root: Element, selector: string, text: string) =>
+  [...root.querySelectorAll(selector)].find((element) => element.textContent === text) ?? null;
+
+const ROWS = rows(['Row A', 'Row B', 'Row C', 'Row D']);
+const CARDS = ['Alpha', 'Beta']
+  .map(
+    (name) => `<div class="card"><h3>${name}</h3><button class="icon"><svg aria-label="Close"></svg>×</button></div>`,
+  )
+  .join('');
+const CARDS_ICON_ONLY = ['Alpha', 'Beta']
+  .map((name) => `<div class="card"><h3>${name}</h3><button aria-label="Close" class="icon">×</button></div>`)
+  .join('');
+const HEADER_FOOTER = `<header><span>Profile</span><button class="save-top">Save</button></header><main><p>Body</p></main><footer><span>©</span><button>Save</button></footer>`;
+const TWO_CLASSED = `<div class="bar"><button class="a">Save</button><button class="b">Save</button></div>`;
+const TWO_SIBLINGS = `<div class="bar"><button>Save</button><button>Save</button></div>`;
+
+interface Case {
+  name: string;
+  html: string;
+  pick: (root: Element) => Element | null;
+  change: (root: Element) => void;
+  /** The element the pin must be on after `change`, or null for detached. */
+  expected: (root: Element, pinned: Element) => Element | null;
+}
+
+const CASES: Case[] = [
+  // Repeated rows: stored row context must be honoured whatever the count.
+  {
+    name: 'Row C Delete, list filtered down to Row D → detached',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: (r) => keepRows(r, ['Row D']),
+    expected: () => null,
+  },
+  {
+    name: 'Row A Delete, list filtered down to Row D → detached',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row A'),
+    change: (r) => keepRows(r, ['Row D']),
+    expected: () => null,
+  },
+  {
+    name: 'Row C Delete, list filtered to Row C and Row D → Row C',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: (r) => keepRows(r, ['Row C', 'Row D']),
+    expected: (r) => rowDelete(r, 'Row C'),
+  },
+  {
+    name: 'Row C Delete, list filtered down to Row C → Row C',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: (r) => keepRows(r, ['Row C']),
+    expected: (r) => rowDelete(r, 'Row C'),
+  },
+  {
+    name: 'Row C Delete, row prepended → Row C',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: (r) => q(r, 'ul').insertAdjacentHTML('afterbegin', '<li><span>Row 0</span><button>Delete</button></li>'),
+    expected: (r) => rowDelete(r, 'Row C'),
+  },
+  {
+    name: 'Row C text, row prepended → Row C',
+    html: ROWS,
+    pick: (r) => rowLabel(r, 'Row C'),
+    change: (r) => q(r, 'ul').insertAdjacentHTML('afterbegin', '<li><span>Row 0</span><button>Delete</button></li>'),
+    expected: (r) => rowLabel(r, 'Row C'),
+  },
+  {
+    name: 'Row C Delete, keyed reverse → Row C',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: keyedReverse,
+    expected: (r) => rowDelete(r, 'Row C'),
+  },
+  {
+    name: 'Row C text, keyed reverse → Row C',
+    html: ROWS,
+    pick: (r) => rowLabel(r, 'Row C'),
+    change: keyedReverse,
+    expected: (r) => rowLabel(r, 'Row C'),
+  },
+  {
+    name: 'Row C Delete, unkeyed reverse → the Delete now in Row C',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: unkeyedReverse,
+    expected: (r) => rowDelete(r, 'Row C'),
+  },
+  {
+    name: 'Row C text, unkeyed reverse → the span now saying Row C',
+    html: ROWS,
+    pick: (r) => rowLabel(r, 'Row C'),
+    change: unkeyedReverse,
+    expected: (r) => rowLabel(r, 'Row C'),
+  },
+  {
+    name: 'Row C Delete, Row B removed → Row C',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: (r) => row(r, 'Row B')?.remove(),
+    expected: (r) => rowDelete(r, 'Row C'),
+  },
+  {
+    name: 'Row C Delete, Row C removed → detached',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: (r) => row(r, 'Row C')?.remove(),
+    expected: () => null,
+  },
+  {
+    name: 'Row C text, Row C removed → detached',
+    html: ROWS,
+    pick: (r) => rowLabel(r, 'Row C'),
+    change: (r) => row(r, 'Row C')?.remove(),
+    expected: () => null,
+  },
+  {
+    name: 'Row C Delete, Row C removed then the list reset → Row C',
+    html: ROWS,
+    pick: (r) => rowDelete(r, 'Row C'),
+    change: (r) => {
+      row(r, 'Row C')?.remove();
+      r.innerHTML = ROWS;
+    },
+    expected: (r) => rowDelete(r, 'Row C'),
+  },
+  {
+    name: "Row C text changed to equal Row B's → detached",
+    html: ROWS,
+    pick: (r) => rowLabel(r, 'Row C'),
+    change: (r) => {
+      const span = rowLabel(r, 'Row C');
+      if (span) span.textContent = 'Row B';
+    },
+    expected: () => null,
+  },
+  // Cards: an icon button named by its icon.
+  {
+    name: "Alpha's × (svg icon), card Alpha removed → detached",
+    html: CARDS,
+    pick: (r) => q(r, '.card:nth-of-type(1) button'),
+    change: (r) => q(r, '.card').remove(),
+    expected: () => null,
+  },
+  {
+    name: "Alpha's Close (aria-label), card Alpha removed → detached",
+    html: CARDS_ICON_ONLY,
+    pick: (r) => q(r, '.card:nth-of-type(1) button'),
+    change: (r) => q(r, '.card').remove(),
+    expected: () => null,
+  },
+  {
+    name: "Beta's Close, card Alpha removed → Beta's",
+    html: CARDS,
+    pick: (r) => q(r, '.card:nth-of-type(2) button'),
+    change: (r) => q(r, '.card').remove(),
+    expected: (_r, pinned) => pinned,
+  },
+  // Look-alikes that are not sibling rows.
+  {
+    name: 'header Save, unchanged → header Save',
+    html: HEADER_FOOTER,
+    pick: (r) => q(r, 'header button'),
+    change: () => undefined,
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'header Save, header Save removed → detached (not the footer one)',
+    html: HEADER_FOOTER,
+    pick: (r) => q(r, 'header button'),
+    change: (r) => q(r, 'header button').remove(),
+    expected: () => null,
+  },
+  {
+    name: 'header Save, footer Save removed → header Save',
+    html: HEADER_FOOTER,
+    pick: (r) => q(r, 'header button'),
+    change: (r) => q(r, 'footer button').remove(),
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'footer Save, header Save removed → footer Save',
+    html: HEADER_FOOTER,
+    pick: (r) => q(r, 'footer button'),
+    change: (r) => q(r, 'header button').remove(),
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'button.a Save, button.a removed → detached (not button.b)',
+    html: TWO_CLASSED,
+    pick: (r) => q(r, 'button.a'),
+    change: (r) => q(r, 'button.a').remove(),
+    expected: () => null,
+  },
+  {
+    name: 'button.a Save, button.b removed → button.a',
+    html: TWO_CLASSED,
+    pick: (r) => q(r, 'button.a'),
+    change: (r) => q(r, 'button.b').remove(),
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'first of two sibling Saves, unchanged → the first',
+    html: TWO_SIBLINGS,
+    pick: (r) => q(r, 'button:nth-of-type(1)'),
+    change: () => undefined,
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'first of two sibling Saves, first removed → detached (not the second)',
+    html: TWO_SIBLINGS,
+    pick: (r) => q(r, 'button:nth-of-type(1)'),
+    change: (r) => q(r, 'button:nth-of-type(1)').remove(),
+    expected: () => null,
+  },
+  {
+    name: 'second of two sibling Saves, a Save prepended → detached (its position now holds another)',
+    html: TWO_SIBLINGS,
+    pick: (r) => q(r, 'button:nth-of-type(2)'),
+    change: (r) => q(r, '.bar').insertAdjacentHTML('afterbegin', '<button>Save</button>'),
+    expected: () => null,
+  },
+  // Unlabeled duplicates: no name, no text.
+  {
+    name: 'first of two unlabeled inputs, first removed → detached',
+    html: `<form><input type="text"><input type="text"></form>`,
+    pick: (r) => q(r, 'input:nth-of-type(1)'),
+    change: (r) => q(r, 'input:nth-of-type(1)').remove(),
+    expected: () => null,
+  },
+  {
+    name: 'first of two unlabeled images, first removed → detached',
+    html: `<div><img src="a.png"><img src="a.png"></div>`,
+    pick: (r) => q(r, 'img:nth-of-type(1)'),
+    change: (r) => q(r, 'img:nth-of-type(1)').remove(),
+    expected: () => null,
+  },
+  {
+    name: 'first of two empty boxes, first removed → detached',
+    html: `<div><div class="box"></div><div class="box"></div></div>`,
+    pick: (r) => q(r, '.box'),
+    change: (r) => q(r, '.box').remove(),
+    expected: () => null,
+  },
+  // Unique elements: identity is the evidence.
+  {
+    name: 'Log in, logged in → detached (never Log out)',
+    html: headerButtons(false),
+    pick: (r) => byText(r, 'button', 'Log in'),
+    change: (r) => (r.innerHTML = headerButtons(true)),
+    expected: () => null,
+  },
+  {
+    name: 'Log in, logged in then out → Log in',
+    html: headerButtons(false),
+    pick: (r) => byText(r, 'button', 'Log in'),
+    change: (r) => {
+      r.innerHTML = headerButtons(true);
+      r.innerHTML = headerButtons(false);
+    },
+    expected: (r) => byText(r, 'button', 'Log in'),
+  },
+  {
+    name: 'Submit swapped for a disabled secondary Submit → the new Submit',
+    html: `<form><input name="q"><button class="primary" type="submit">Submit</button></form>`,
+    pick: (r) => q(r, 'button'),
+    change: (r) => (q(r, 'form').innerHTML = '<input name="q"><button class="secondary" disabled>Submit</button>'),
+    expected: (r) => q(r, 'button'),
+  },
+  {
+    name: 'unique button moved to a different parent → follows',
+    html: `<div class="left"><button class="go">Go</button></div><div class="right"></div>`,
+    pick: (r) => q(r, 'button'),
+    change: (r) => q(r, '.right').append(q(r, 'button')),
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'colour, padding and an added class → still attached',
+    html: `<div><button class="cta">Buy</button><p>Price</p></div>`,
+    pick: (r) => q(r, 'button'),
+    change: (r) => {
+      const button = q(r, 'button');
+      button.setAttribute('style', 'color: red; padding: 20px');
+      button.classList.add('cta--large');
+    },
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'layout wrapper added around a unique element → still attached',
+    html: `<div><button class="cta">Buy</button><p>Price</p></div>`,
+    pick: (r) => q(r, 'button'),
+    change: (r) => {
+      const wrapper = document.createElement('section');
+      const button = q(r, 'button');
+      button.replaceWith(wrapper);
+      wrapper.append(button);
+    },
+    expected: (_r, pinned) => pinned,
+  },
+  {
+    name: 'unique Save, a second Save added elsewhere → still the first',
+    html: `<header><button class="save">Save</button></header><footer></footer>`,
+    pick: (r) => q(r, 'button'),
+    change: (r) => q(r, 'footer').insertAdjacentHTML('beforeend', '<button>Save</button>'),
+    expected: (_r, pinned) => pinned,
+  },
+];
+
+describe('resolveTarget: the rule, case by case', () => {
+  it.each(CASES)('$name', ({ html, pick, change, expected }) => {
+    const root = story(html);
+    const pinned = pick(root);
+    if (!pinned) throw new Error('nothing to pin');
+    const target = pin(root, pinned);
+    expect(elementTargetSchema.safeParse(target).success).toBe(true);
+    expect(resolveTarget(root, target)).toMatchObject({ kind: 'found', element: pinned });
+    change(root);
+    const want = expected(root, pinned);
+    const got = resolveTarget(root, target);
+    if (want === null) expect(got).toEqual({ kind: 'detached' });
+    else {
+      expect(got.kind).toBe('found');
+      expect(got.kind === 'found' && got.element).toBe(want);
+    }
+  });
+});
+
+describe('describeElement: look-alikes', () => {
+  it('stores the header text for a Save that a footer also has', () => {
+    const root = story(HEADER_FOOTER);
+    expect(pin(root, q(root, 'header button'))).toMatchObject({ lookAlikes: 2, context: 'Profile Save' });
+    expect(pin(root, q(root, 'footer button'))).toMatchObject({ lookAlikes: 2, context: '© Save' });
+  });
+
+  it("stores the card's text for its icon button", () => {
+    const root = story(CARDS);
+    expect(pin(root, q(root, 'button'))).toMatchObject({ name: '×', lookAlikes: 2, context: 'Alpha ×' });
+  });
+
+  it('records look-alikes without context when nothing tells them apart', () => {
+    const root = story(TWO_SIBLINGS);
+    const target = pin(root, q(root, 'button'));
+    expect(target.lookAlikes).toBe(2);
+    expect(target).not.toHaveProperty('context');
+  });
+
+  it('records nothing extra for a unique element', () => {
+    const root = story(HEADER);
+    const target = pin(root, q(root, '.storybook-button--secondary'));
+    expect(target).not.toHaveProperty('lookAlikes');
+    expect(target).not.toHaveProperty('context');
+  });
+});
+
+describe('resolveTarget: targets saved by earlier versions', () => {
+  it('honours a context saved without lookAlikes (task 7a files)', () => {
+    const root = story(ROWS);
+    const target = { ...pin(root, rowDelete(root, 'Row C') as Element) };
+    delete target.lookAlikes;
+    expect(target.context).toBe('Row C Delete');
+    keepRows(root, ['Row D']);
+    expect(resolveTarget(root, target)).toEqual({ kind: 'detached' });
+  });
+
+  it('still resolves a target with neither context nor lookAlikes by its selector', () => {
+    const root = story(ROWS);
+    const target = {
+      selector: 'li:nth-of-type(3) > button',
+      html: '<button>Delete</button>',
+      text: 'Delete',
+      role: 'button',
+      name: 'Delete',
+    };
+    expect(elementTargetSchema.safeParse({ ...target, storyId: 's', title: 't', importPath: './a.ts' }).success).toBe(
+      true,
+    );
+    expect(resolveTarget(root, target)).toEqual({ kind: 'found', element: rowDelete(root, 'Row C'), by: 'selector' });
+  });
+
+  it('rejects an invalid lookAlikes value', () => {
+    const base = { storyId: 's', title: 't', importPath: './a.ts', selector: 'b', html: '<b></b>', text: '' };
+    expect(elementTargetSchema.safeParse({ ...base, lookAlikes: 1 }).success).toBe(false);
+    expect(elementTargetSchema.safeParse({ ...base, lookAlikes: 2.5 }).success).toBe(false);
+    expect(elementTargetSchema.safeParse({ ...base, lookAlikes: 3 }).success).toBe(true);
+  });
+});

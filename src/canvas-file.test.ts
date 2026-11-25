@@ -210,7 +210,7 @@ describe('validateCanvasFile: invalid files', () => {
 
   it('rejects an element anchor missing its target fields, and unknown anchor types', () => {
     const canvas = fixture();
-    const anchor = canvas.comments[0]!.anchor as { target: Partial<Record<string, string>> };
+    const anchor = canvas.comments[0]!.anchor as unknown as { target: Partial<Record<string, string>> };
     delete anchor.target.selector;
     delete anchor.target.importPath;
     (canvas.comments[1] as unknown as { anchor: unknown }).anchor = { type: 'story', storyId: 'x', x: 0, y: 0 };
