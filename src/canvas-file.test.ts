@@ -9,6 +9,8 @@ import {
   createId,
   isCanvasId,
   parseCanvasFile,
+  reopenComment,
+  resolveComment,
   serializeCanvasFile,
   validateCanvasFile,
 } from './canvas-file';
@@ -23,18 +25,25 @@ function expectErrors(value: unknown): string[] {
 }
 
 describe('validateCanvasFile: valid files', () => {
-  it('accepts the example file with frames, element and position comments, replies and strokes', () => {
+  it('accepts the example file with frames, element, frame and position comments, replies and strokes', () => {
     const result = parseCanvasFile(fixtureText);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.canvas.schemaVersion).toBe(CANVAS_SCHEMA_VERSION);
     expect(result.canvas.frames).toHaveLength(2);
-    const [elementComment, positionComment] = result.canvas.comments;
+    const [elementComment, positionComment, frameComment] = result.canvas.comments;
     expect(elementComment?.anchor.type).toBe('element');
     if (elementComment?.anchor.type === 'element') {
       expect(elementComment.anchor.target.importPath).toBe('./src/stories/Header.stories.ts');
     }
     expect(positionComment?.anchor).toEqual({ type: 'position', x: 120, y: 140 });
+    expect(frameComment?.anchor).toEqual({
+      type: 'frame',
+      frameId: 'frame-button01',
+      storyId: 'example-button--primary',
+      x: 24,
+      y: 12,
+    });
     expect(result.canvas.strokes[0]?.points).toHaveLength(5);
   });
 
@@ -42,7 +51,7 @@ describe('validateCanvasFile: valid files', () => {
     expect(validateCanvasFile(createCanvasFile({ id: 'empty', name: 'Empty' })).ok).toBe(true);
   });
 
-  it('accepts optional fields being absent (frame height, role, name, resolvedAt)', () => {
+  it('accepts optional fields being absent (frame height, role, name, frame anchor offset)', () => {
     const canvas = fixture();
     delete canvas.frames[1]!.height;
     const anchor = canvas.comments[0]!.anchor;
@@ -50,7 +59,33 @@ describe('validateCanvasFile: valid files', () => {
       delete anchor.target.role;
       delete anchor.target.name;
     }
-    delete canvas.comments[1]!.resolvedAt;
+    canvas.comments[2]!.anchor = { type: 'frame', frameId: 'frame-button01', storyId: 'example-button--primary' };
+    expect(validateCanvasFile(canvas).ok).toBe(true);
+  });
+
+  it('accepts html and text at their 2000-character maximum, and a frame anchor at offset 0,0', () => {
+    const canvas = fixture();
+    const anchor = canvas.comments[0]!.anchor;
+    if (anchor.type !== 'element') throw new Error('fixture comment 0 should be an element comment');
+    anchor.target.html = 'x'.repeat(2000);
+    anchor.target.text = 'y'.repeat(2000);
+    canvas.comments[2]!.anchor = {
+      type: 'frame',
+      frameId: 'frame-gone',
+      storyId: 'example-button--primary',
+      x: 0,
+      y: 0,
+    };
+    expect(validateCanvasFile(canvas).ok).toBe(true);
+  });
+
+  it('accepts open comments without resolvedAt and resolved comments with it', () => {
+    const canvas = fixture();
+    expect(canvas.comments.map((c) => [c.status, c.resolvedAt !== undefined])).toEqual([
+      ['open', false],
+      ['resolved', true],
+      ['open', false],
+    ]);
     expect(validateCanvasFile(canvas).ok).toBe(true);
   });
 
@@ -99,6 +134,68 @@ describe('validateCanvasFile: invalid files', () => {
     ]);
   });
 
+  it('rejects a frame height of zero or below', () => {
+    for (const height of [0, -80]) {
+      const canvas = fixture();
+      canvas.frames[1]!.height = height;
+      expect(expectErrors(canvas)).toEqual([expect.stringMatching(/^frames\[1\]\.height:/)]);
+    }
+  });
+
+  it('rejects element target html or text longer than 2000 characters', () => {
+    const canvas = fixture();
+    const anchor = canvas.comments[0]!.anchor;
+    if (anchor.type !== 'element') throw new Error('fixture comment 0 should be an element comment');
+    anchor.target.html = 'x'.repeat(2001);
+    anchor.target.text = 'y'.repeat(2001);
+    expect(expectErrors(canvas)).toEqual([
+      expect.stringMatching(/^comments\[0\]\.anchor\.target\.html:/),
+      expect.stringMatching(/^comments\[0\]\.anchor\.target\.text:/),
+    ]);
+  });
+
+  it('rejects an empty element target role or name', () => {
+    const canvas = fixture();
+    const anchor = canvas.comments[0]!.anchor;
+    if (anchor.type !== 'element') throw new Error('fixture comment 0 should be an element comment');
+    anchor.target.role = '';
+    anchor.target.name = '';
+    expect(expectErrors(canvas)).toEqual([
+      expect.stringMatching(/^comments\[0\]\.anchor\.target\.role:/),
+      expect.stringMatching(/^comments\[0\]\.anchor\.target\.name:/),
+    ]);
+  });
+
+  it('rejects a resolved comment without resolvedAt and an open comment with one', () => {
+    const canvas = fixture();
+    delete canvas.comments[1]!.resolvedAt;
+    canvas.comments[2]!.resolvedAt = '2026-11-25T15:40:00.000Z';
+    expect(expectErrors(canvas)).toEqual([
+      'comments[1].resolvedAt: a resolved comment needs resolvedAt',
+      'comments[2].resolvedAt: an open comment must not have resolvedAt',
+    ]);
+  });
+
+  it('rejects a frame anchor without frameId or storyId, with half an offset, or with a negative offset', () => {
+    const canvas = fixture();
+    const base = { type: 'frame' as const, frameId: 'frame-button01', storyId: 'example-button--primary' };
+    const anchors: unknown[] = [
+      { type: 'frame', storyId: 'example-button--primary' },
+      { type: 'frame', frameId: 'frame-button01', storyId: '' },
+      { ...base, x: 10 },
+      { ...base, y: 10 },
+      { ...base, x: -1, y: 0 },
+    ];
+    const comments = anchors.map((anchor, i) => ({ ...canvas.comments[2]!, id: `comment-f${i}`, anchor }));
+    expect(expectErrors({ ...canvas, comments })).toEqual([
+      expect.stringMatching(/^comments\[0\]\.anchor\.frameId:/),
+      expect.stringMatching(/^comments\[1\]\.anchor\.storyId:/),
+      'comments[2].anchor.y: x and y must be given together',
+      'comments[3].anchor.x: x and y must be given together',
+      expect.stringMatching(/^comments\[4\]\.anchor\.x:/),
+    ]);
+  });
+
   it('rejects unknown authors and statuses, and empty bodies', () => {
     const canvas = fixture();
     (canvas.comments[0] as unknown as { author: string }).author = 'bot';
@@ -116,7 +213,7 @@ describe('validateCanvasFile: invalid files', () => {
     const anchor = canvas.comments[0]!.anchor as { target: Partial<Record<string, string>> };
     delete anchor.target.selector;
     delete anchor.target.importPath;
-    (canvas.comments[1] as unknown as { anchor: unknown }).anchor = { type: 'story', storyId: 'x' };
+    (canvas.comments[1] as unknown as { anchor: unknown }).anchor = { type: 'story', storyId: 'x', x: 0, y: 0 };
     const errors = expectErrors(canvas);
     expect(errors).toContainEqual(expect.stringMatching(/^comments\[0\]\.anchor\.target\.selector:/));
     expect(errors).toContainEqual(expect.stringMatching(/^comments\[0\]\.anchor\.target\.importPath:/));
@@ -166,6 +263,26 @@ describe('serializeCanvasFile', () => {
 
   it('throws on an invalid canvas instead of writing it', () => {
     expect(() => serializeCanvasFile({ ...fixture(), id: 'Bad Id' })).toThrow(/id:/);
+  });
+});
+
+describe('resolveComment and reopenComment', () => {
+  it('resolveComment sets status and resolvedAt without mutating the input', () => {
+    const open = fixture().comments[0]!;
+    const resolved = resolveComment(open, new Date('2026-11-25T16:00:00.000Z'));
+    expect(resolved).toMatchObject({ status: 'resolved', resolvedAt: '2026-11-25T16:00:00.000Z' });
+    expect(open.status).toBe('open');
+    expect('resolvedAt' in open).toBe(false);
+  });
+
+  it('reopenComment clears resolvedAt so the result validates', () => {
+    const canvas = fixture();
+    const reopened = reopenComment(canvas.comments[1]!);
+    expect(reopened.status).toBe('open');
+    expect('resolvedAt' in reopened).toBe(false);
+    canvas.comments[1] = reopened;
+    expect(validateCanvasFile(canvas).ok).toBe(true);
+    expect(serializeCanvasFile(canvas)).not.toContain('"resolvedAt": "2026-11-25T15:30:00.000Z"');
   });
 });
 

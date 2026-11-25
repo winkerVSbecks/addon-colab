@@ -64,6 +64,21 @@
       "createdAt": "2026-11-25T15:25:00.000Z",
       "resolvedAt": "2026-11-25T15:30:00.000Z",
       "replies": []
+    },
+    {
+      "id": "comment-button01",
+      "author": "agent",
+      "body": "This story has no disabled state yet. Add one?",
+      "status": "open",
+      "anchor": {
+        "type": "frame",
+        "frameId": "frame-button01",
+        "storyId": "example-button--primary",
+        "x": 24,
+        "y": 12
+      },
+      "createdAt": "2026-11-25T15:28:00.000Z",
+      "replies": []
     }
   ],
   "strokes": [

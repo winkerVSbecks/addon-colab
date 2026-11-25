@@ -6,7 +6,8 @@
  * `validateCanvasFile` / `parseCanvasFile` and `serializeCanvasFile`.
  *
  * Coordinates (frame positions, position anchors, stroke points) are world coordinates
- * on the board in CSS pixels at zoom 1, independent of pan and zoom.
+ * on the board in CSS pixels at zoom 1, independent of pan and zoom. Frame anchor offsets are
+ * CSS pixels from the frame's top-left corner.
  */
 import { z } from 'zod';
 
@@ -62,6 +63,30 @@ export const elementAnchorSchema = z.object({
   target: elementTargetSchema,
 });
 
+/**
+ * Pins a comment to a whole story frame, for remarks about the story rather than one element.
+ * `x`/`y` (given together or not at all) place the pin relative to the frame's top-left corner;
+ * without them the pin sits at the corner. Like element anchors, `frameId` may refer to a removed
+ * frame; `storyId` still identifies the story.
+ */
+export const frameAnchorSchema = z
+  .object({
+    type: z.literal('frame'),
+    frameId: id,
+    storyId: z.string().min(1),
+    x: z.number().nonnegative().optional(),
+    y: z.number().nonnegative().optional(),
+  })
+  .superRefine((anchor, ctx) => {
+    if ((anchor.x === undefined) !== (anchor.y === undefined)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [anchor.x === undefined ? 'x' : 'y'],
+        message: 'x and y must be given together',
+      });
+    }
+  });
+
 /** Pins a comment to a free point on the board. */
 export const positionAnchorSchema = z.object({
   type: z.literal('position'),
@@ -69,7 +94,11 @@ export const positionAnchorSchema = z.object({
   y: coordinate,
 });
 
-export const anchorSchema = z.discriminatedUnion('type', [elementAnchorSchema, positionAnchorSchema]);
+export const anchorSchema = z.discriminatedUnion('type', [
+  elementAnchorSchema,
+  frameAnchorSchema,
+  positionAnchorSchema,
+]);
 
 export const replySchema = z.object({
   id,
@@ -78,16 +107,25 @@ export const replySchema = z.object({
   createdAt: timestamp,
 });
 
-export const commentSchema = z.object({
-  id,
-  author: authorSchema,
-  body: z.string().trim().min(1),
-  status: commentStatusSchema,
-  anchor: anchorSchema,
-  createdAt: timestamp,
-  resolvedAt: timestamp.optional(),
-  replies: z.array(replySchema),
-});
+/** `resolvedAt` is present exactly when `status` is `resolved`; use `resolveComment` / `reopenComment`. */
+export const commentSchema = z
+  .object({
+    id,
+    author: authorSchema,
+    body: z.string().trim().min(1),
+    status: commentStatusSchema,
+    anchor: anchorSchema,
+    createdAt: timestamp,
+    resolvedAt: timestamp.optional(),
+    replies: z.array(replySchema),
+  })
+  .superRefine((comment, ctx) => {
+    if (comment.status === 'resolved' && comment.resolvedAt === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['resolvedAt'], message: 'a resolved comment needs resolvedAt' });
+    } else if (comment.status === 'open' && comment.resolvedAt !== undefined) {
+      ctx.addIssue({ code: 'custom', path: ['resolvedAt'], message: 'an open comment must not have resolvedAt' });
+    }
+  });
 
 export const pointSchema = z.tuple([coordinate, coordinate]);
 
@@ -133,6 +171,7 @@ export type CommentStatus = z.infer<typeof commentStatusSchema>;
 export type Frame = z.infer<typeof frameSchema>;
 export type ElementTarget = z.infer<typeof elementTargetSchema>;
 export type ElementAnchor = z.infer<typeof elementAnchorSchema>;
+export type FrameAnchor = z.infer<typeof frameAnchorSchema>;
 export type PositionAnchor = z.infer<typeof positionAnchorSchema>;
 export type Anchor = z.infer<typeof anchorSchema>;
 export type Reply = z.infer<typeof replySchema>;
@@ -207,6 +246,18 @@ export function createCanvasFile({ id, name, now = new Date() }: { id: string; n
     throw new Error(`Invalid canvas:\n${result.errors.join('\n')}`);
   }
   return result.canvas;
+}
+
+/** Returns a resolved copy of the comment, stamped with `now`. */
+export function resolveComment(comment: Comment, now: Date = new Date()): Comment {
+  return { ...comment, status: 'resolved', resolvedAt: now.toISOString() };
+}
+
+/** Returns an open copy of the comment with `resolvedAt` removed. */
+export function reopenComment(comment: Comment): Comment {
+  const reopened: Comment = { ...comment, status: 'open' };
+  delete reopened.resolvedAt;
+  return reopened;
 }
 
 export function isCanvasId(value: string): boolean {
