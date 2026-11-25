@@ -66,10 +66,11 @@ if (!process.env.SKIP_C) {
   await page.goto(`${SB}/?path=/story/spike-board--default&geom=${GEOM}`);
   const preview = page.frameLocator('#storybook-preview-iframe');
   await page.waitForSelector('#storybook-preview-iframe');
-  // Expanding a component in the sidebar also navigates to its first story, so go back to the board afterwards.
-  await page.locator('#example-button').click();
+  // Expand Button so its story rows exist. On Storybook 10 this also navigated to its first story;
+  // on 11 a component row only expands. Selecting the board again covers both.
+  await page.locator('[data-item-id="example-button"]').click();
   await page.waitForTimeout(500);
-  await page.locator('#spike-board--default').click();
+  await page.locator('[data-item-id="spike-board--default"]').click();
   await page.waitForTimeout(500);
   const frame = page.frame({ url: /iframe\.html/ });
   await frame.waitForFunction(() => window.spike && document.querySelector('canvas'));
@@ -90,6 +91,11 @@ if (!process.env.SKIP_C) {
     expectedWorld: await frame.evaluate(() => { const v = window.spike.view; const r = document.querySelector('canvas').getBoundingClientRect(); return [Math.round((400 - r.left - v.panX) / v.zoom), Math.round((300 - r.top - v.panY) / v.zoom)]; }),
   };
   await page.screenshot({ path: `spike/out/manager-drop-dpr${DPR}.png` });
+  out.c.urlAfterDrop = page.url();
+  // Clicking a draggable label must still navigate (it stops the row's pointerdown, so it navigates itself).
+  await page.locator('[data-spike-drag="example-button--primary"]').click();
+  await page.waitForTimeout(800);
+  out.c.urlAfterLabelClick = page.url();
   void preview;
 }
 console.log(JSON.stringify(out, null, 1));

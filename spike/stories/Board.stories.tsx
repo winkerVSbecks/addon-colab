@@ -67,7 +67,9 @@ function Board() {
 
     async function addStory(storyId: string, x: number, y: number) {
       const preview = window.__STORYBOOK_PREVIEW__;
-      const story = await preview.storyStoreValue.loadStory({ storyId });
+      // Storybook 11: `loadStory` and `renderStoryToElement` are public methods of the preview
+      // (PreviewWeb); `storyStoreValue` is protected, so do not reach into it.
+      const story = await preview.loadStory({ storyId });
       const el = document.createElement('div');
       el.setAttribute('drawable', '');
       el.dataset.storyId = storyId;
