@@ -318,9 +318,23 @@ describe('resolveTarget', () => {
     expect(result.kind === 'found' && result.by).toBe('role');
   });
 
+  it('prefers the element with the stored role and name when the selector now matches another one', () => {
+    // Page story after logging in: "Log in" became "Log out" with the same classes.
+    const root = story(`<button class="btn btn--secondary">Log out</button><div><button>Log in</button></div>`);
+    const result = resolveTarget(root, { selector: 'button.btn--secondary', role: 'button', name: 'Log in' });
+    expect(result.kind === 'found' && result.element.textContent).toBe('Log in');
+  });
+
+  it('keeps the selector match when the text was edited and nothing else has the old name', () => {
+    const root = story(`<button class="cta">Sign in</button>`);
+    const result = resolveTarget(root, { selector: 'button.cta', role: 'button', name: 'Log in' });
+    expect(result).toEqual({ kind: 'found', element: q(root, 'button'), by: 'selector' });
+  });
+
   it('is detached when the element is gone or the role and name are ambiguous', () => {
     const root = story(`<button>Go</button><button>Go</button>`);
     expect(resolveTarget(root, { selector: '#missing', role: 'button', name: 'Go' })).toEqual({ kind: 'detached' });
+    expect(resolveTarget(root, { selector: 'button', role: 'button', name: 'Go' })).toEqual({ kind: 'detached' });
     expect(resolveTarget(root, { selector: '#missing' })).toEqual({ kind: 'detached' });
     expect(resolveTarget(root, { selector: '[[invalid' })).toEqual({ kind: 'detached' });
   });

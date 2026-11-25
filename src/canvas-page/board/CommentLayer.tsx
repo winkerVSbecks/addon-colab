@@ -22,14 +22,15 @@ import { describeAnchor, timeAgo } from '../../board/comment-pins';
 import type { Size } from '../../board/viewport';
 import type { Comment } from '../../canvas-file';
 import { CommentList } from './CommentList';
-import { AuthorIcon, authorLabel, hardText } from './comment-ui';
+import { AuthorIcon, authorLabel, box, hardText, storyCssShield } from './comment-ui';
 import type { CommentLayerState, ShownPin } from './use-comments';
 
 /** Pins and cards sit above the mode layer (2) and below the toolbar and notice (3, later in the DOM). */
 export const COMMENT_LAYER_Z = 3;
 /** Storybook's minimum touch target (`code/core/src/highlight/constants.ts`, MIN_TOUCH_AREA_SIZE). */
 export const PIN_SIZE = 28;
-const STACK_STEP = 14;
+/** Pins on one spot fan out to the right, each still showing most of itself (and clickable). */
+const STACK_STEP = 22;
 const CARD_WIDTH = 320;
 
 const Layer = styled.div({
@@ -39,9 +40,11 @@ const Layer = styled.div({
   zIndex: COMMENT_LAYER_Z,
   pointerEvents: 'none',
   overflow: 'hidden',
+  ...storyCssShield,
 });
 
 const Highlight = styled.div(({ theme }) => ({
+  ...box,
   position: 'absolute',
   boxSizing: 'border-box',
   pointerEvents: 'none',
@@ -77,6 +80,8 @@ const pulse = keyframes({
 });
 
 const Pin = styled.button(({ theme }) => ({
+  // Doubled class: beats a story's attribute rules such as \`[aria-label] { min-width }\`.
+  '&&': { width: PIN_SIZE, minWidth: PIN_SIZE, maxWidth: PIN_SIZE, height: PIN_SIZE, minHeight: PIN_SIZE },
   all: 'unset',
   ...hardText(theme),
   position: 'absolute',
@@ -124,23 +129,28 @@ const ReplyCount = styled.span(({ theme }) => ({
 }));
 
 const CardPosition = styled.div({
+  ...box,
   position: 'absolute',
   width: CARD_WIDTH,
   pointerEvents: 'auto',
 });
 
 const Card = styled.div(({ theme }) => ({
+  ...box,
   ...hardText(theme),
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
   padding: 12,
   maxHeight: 420,
+  // Popover's chrome is see-through in Storybook 11; a thread must hide what is under it.
+  background: theme.background.content,
+  borderRadius: theme.appBorderRadius,
   overflowY: 'auto',
   '& textarea': { ...hardText(theme), width: '100%' },
 }));
 
-const Row = styled.div({ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 });
+const Row = styled.div({ ...box, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 });
 
 const Author = styled.span(({ theme }) => ({
   ...hardText(theme),
@@ -176,6 +186,7 @@ const Selector = styled.code(({ theme }) => ({
 }));
 
 const Reply = styled.div(({ theme }) => ({
+  ...box,
   display: 'flex',
   flexDirection: 'column',
   gap: 2,
@@ -183,7 +194,7 @@ const Reply = styled.div(({ theme }) => ({
   borderLeft: `2px solid ${theme.appBorderColor}`,
 }));
 
-const Actions = styled.div({ display: 'flex', justifyContent: 'flex-end', gap: 6 });
+const Actions = styled.div({ ...box, display: 'flex', justifyContent: 'flex-end', gap: 6 });
 const Spacer = styled.span({ flex: 1 });
 
 /** Where a card goes next to a screen point: to its right, or to its left near the right edge. */
@@ -340,6 +351,17 @@ function ThreadCard({ pin, comment, state }: { pin?: ShownPin; comment: Comment;
   );
 }
 
+/**
+ * Pins at a frame's very corner (a detached element, a story not rendered yet, a frame comment with
+ * no offset) hang inside the frame instead of above it, so they do not cover the frame's title.
+ */
+function insideFrame(pin: ShownPin): boolean {
+  const { placement } = pin;
+  if (placement.state === 'detached' || placement.state === 'pending') return true;
+  const { anchor } = pin.comment;
+  return anchor.type === 'frame' && anchor.x === undefined;
+}
+
 function pinLabel(comment: Comment, state: CommentLayerState): string {
   const status = comment.status === 'resolved' ? ' (resolved)' : '';
   const replies = comment.replies.length
@@ -381,6 +403,8 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
         </Highlight>
       )}
 
+      {state.listOpen && <CommentList state={state} />}
+
       {pins.map((pin) => {
         if (!pin.screen) return null;
         const { comment } = pin;
@@ -396,12 +420,16 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
             aria-expanded={openId === comment.id}
             title={pin.placement.state === 'detached' ? 'The element is gone: shown on its story' : undefined}
             data-colab-pin={comment.id}
+            data-colab-own=""
             data-author={comment.author}
             data-status={comment.status}
             data-state={pin.placement.state}
             data-open={openId === comment.id ? '' : undefined}
             data-fresh={pin.fresh ? '' : undefined}
-            style={{ left: pin.screen.x + pin.stack * STACK_STEP, top: pin.screen.y - PIN_SIZE }}
+            style={{
+              left: pin.screen.x + pin.stack * STACK_STEP,
+              top: pin.screen.y - (insideFrame(pin) ? 0 : PIN_SIZE),
+            }}
             // A press on a pin is not a press on the board (no new comment, no pan, no select).
             onPointerDown={(event) => event.stopPropagation()}
             onClick={() => state.setOpenId(openId === comment.id ? null : comment.id)}
@@ -463,8 +491,6 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
           </Popover>
         </CardPosition>
       )}
-
-      {state.listOpen && <CommentList state={state} />}
     </Layer>
   );
 }

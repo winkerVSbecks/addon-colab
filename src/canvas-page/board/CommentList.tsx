@@ -17,12 +17,13 @@ import { CheckIcon, CloseIcon } from '@storybook/icons';
 import { styled } from 'storybook/theming/emotion';
 
 import { describeAnchor, sortComments, timeAgo } from '../../board/comment-pins';
-import { AuthorIcon, authorLabel, hardText } from './comment-ui';
+import { AuthorIcon, authorLabel, box, hardText } from './comment-ui';
 import type { CommentLayerState } from './use-comments';
 
 export const LIST_WIDTH = 320;
 
 const Panel = styled.aside(({ theme }) => ({
+  ...box,
   ...hardText(theme),
   position: 'absolute',
   top: 12,
@@ -40,6 +41,7 @@ const Panel = styled.aside(({ theme }) => ({
 }));
 
 const Header = styled.div(({ theme }) => ({
+  ...box,
   ...hardText(theme),
   display: 'flex',
   alignItems: 'center',
@@ -57,9 +59,12 @@ const Title = styled.h2(({ theme }) => ({
   fontSize: theme.typography.size.s2,
 }));
 
-const Items = styled.ul({ listStyle: 'none', margin: 0, padding: 0 });
+const Items = styled.ul({
+  '&&, && > li': { listStyle: 'none', margin: 0, padding: 0, border: 0 },
+});
 
 const Item = styled.button(({ theme }) => ({
+  '&&': { width: '100%', minWidth: 0, maxWidth: 'none', margin: 0 },
   all: 'unset',
   ...hardText(theme),
   display: 'flex',
@@ -75,7 +80,7 @@ const Item = styled.button(({ theme }) => ({
   '&[data-status="resolved"]': { opacity: 0.7 },
 }));
 
-const Line = styled.span({ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 });
+const Line = styled.span({ ...box, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 });
 
 const Who = styled.span(({ theme }) => ({
   ...hardText(theme),
@@ -151,6 +156,7 @@ export function CommentList({ state }: { state: CommentLayerState }) {
                   <Item
                     type="button"
                     data-colab-list-item={comment.id}
+                    data-colab-own=""
                     data-status={comment.status}
                     aria-current={state.openId === comment.id ? 'true' : undefined}
                     onClick={() => state.focus(comment.id)}

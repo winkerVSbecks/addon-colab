@@ -28,6 +28,7 @@ import { styled } from 'storybook/theming/emotion';
 
 import { type BoardMode, MODE_LABELS, MODE_SHORTCUTS } from '../../board/modes';
 import { MAX_ZOOM, MIN_ZOOM } from '../../board/viewport';
+import { storyCssShield } from './comment-ui';
 
 const MODE_ICONS: Record<BoardMode, React.ReactNode> = {
   select: <PointerDefaultIcon />,
@@ -64,6 +65,8 @@ const Floating = styled.div(({ theme }) => ({
   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
   overflow: 'hidden',
   '& > *': { border: 'none' },
+  // Story CSS shares this page (e.g. \`button { width: 100% }\`): keep Storybook's button sizes.
+  ...storyCssShield,
 }));
 
 const Count = styled.span({ fontVariantNumeric: 'tabular-nums', marginLeft: 2 });

@@ -488,22 +488,34 @@ export function describeElement(element: Element, root: Element, story: TargetSt
 export type ResolvedTarget = { kind: 'found'; element: Element; by: 'selector' | 'role' } | { kind: 'detached' };
 
 /**
- * Finds a target's element in the story root again: by its selector, or else (after a re-render
- * changed the DOM) by role and accessible name when exactly one element has them. Otherwise the
- * target is detached and its pin falls back to the frame.
+ * Finds a target's element in the story root again:
+ * 1. by its selector, when the element it matches still has the stored role and name (or none
+ *    were stored);
+ * 2. else by role and accessible name, when exactly one element has them (a re-render changed the
+ *    markup, or the selector now matches a different element, such as "Log out" where "Log in" was);
+ * 3. else by the selector alone, when it matches one element (its text was edited, e.g. after the
+ *    agent renamed the button);
+ * otherwise the target is detached and its pin falls back to the frame.
  */
 export function resolveTarget(
   root: Element,
   target: Pick<ElementTarget, 'selector' | 'role' | 'name'>,
 ): ResolvedTarget {
   const bySelector = queryUnique(root, target.selector);
-  if (bySelector) return { kind: 'found', element: bySelector, by: 'selector' };
-  if (target.role && target.name) {
+  const hasIdentity = !!(target.role && target.name);
+  if (
+    bySelector &&
+    (!hasIdentity || (roleOf(bySelector) === target.role && accessibleName(bySelector) === target.name))
+  ) {
+    return { kind: 'found', element: bySelector, by: 'selector' };
+  }
+  if (hasIdentity) {
     const matches = [...root.querySelectorAll('*')].filter(
       (element) => roleOf(element) === target.role && accessibleName(element) === target.name,
     );
     const [only] = matches;
     if (only && matches.length === 1) return { kind: 'found', element: only, by: 'role' };
   }
+  if (bySelector) return { kind: 'found', element: bySelector, by: 'selector' };
   return { kind: 'detached' };
 }
