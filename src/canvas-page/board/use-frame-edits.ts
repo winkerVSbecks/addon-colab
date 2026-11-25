@@ -18,6 +18,7 @@ import {
   settleFrameEdits,
   withLiveEdit,
 } from '../../board/frame-edits';
+import { withMinimumSize } from '../../board/frame-defaults';
 import type { CanvasFile, Frame } from '../../canvas-file';
 import { CanvasRequestError, type ChannelLike, type FrameChanges, requestCanvas } from '../../channel';
 
@@ -29,7 +30,7 @@ function describe(error: unknown): string {
 }
 
 export interface FrameEditsApi {
-  /** The frames to show: the file plus local edits. */
+  /** The frames to show: the file plus local edits, at no less than the minimum frame size. */
   frames: Frame[];
   /** Shows a change at once without saving (during a drag). */
   preview: (frameId: string, changes: FrameEditChanges) => void;
@@ -194,7 +195,10 @@ export function useFrameEdits(
   }, []);
 
   // `version` changes whenever the edits (kept in a ref) change.
-  const frames = useMemo(() => applyFrameEdits(canvas.frames, editsRef.current), [canvas.frames, version]);
+  const frames = useMemo(
+    () => applyFrameEdits(canvas.frames, editsRef.current).map(withMinimumSize),
+    [canvas.frames, version],
+  );
 
   return { frames, preview, commit, remove, restore, measured, setBusy };
 }

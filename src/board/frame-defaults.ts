@@ -41,6 +41,20 @@ export function clampFrameSize(value: number, min: number): number {
   return Math.round(Math.min(MAX_FRAME_SIZE, Math.max(min, value)));
 }
 
+/**
+ * A frame as the board shows it: at least the minimum size, whatever the file says. The resize
+ * handles already keep to these minimums; a hand-edited or agent-written file may not (a 1px-wide
+ * frame could not be seen or grabbed). The file is left as it is until the frame is resized.
+ */
+export function withMinimumSize<F extends Pick<Frame, 'width' | 'height'>>(frame: F): F {
+  const width = Math.max(MIN_FRAME_WIDTH, frame.width);
+  const height = frame.height === undefined ? undefined : Math.max(MIN_FRAME_HEIGHT, frame.height);
+  if (width === frame.width && height === frame.height) return frame;
+  const next = { ...frame, width };
+  if (height !== undefined) next.height = height;
+  return next;
+}
+
 /** Store coordinates are whole CSS pixels; keeps files tidy and diffs small. */
 export function roundPoint(point: Point): Point {
   return { x: Math.round(point.x), y: Math.round(point.y) };

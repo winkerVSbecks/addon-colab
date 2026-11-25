@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  withMinimumSize,
   ASSUMED_FRAME_HEIGHT,
   FRAME_GAP,
   MAX_FRAME_SIZE,
@@ -43,5 +44,30 @@ describe('frame defaults', () => {
     expect(frameRect(frame).height).toBe(ASSUMED_FRAME_HEIGHT);
     expect(frameRect({ ...frame, height: 90 }).height).toBe(90);
     expect(frameRect({ ...frame, height: 90 }, 120).height).toBe(120);
+  });
+});
+
+describe('withMinimumSize', () => {
+  it('widens a frame from the file that is narrower than the minimum', () => {
+    expect(withMinimumSize({ id: 'f', storyId: 's', x: 3, y: 4, width: 1 })).toEqual({
+      id: 'f',
+      storyId: 's',
+      x: 3,
+      y: 4,
+      width: 120,
+    });
+  });
+
+  it('raises a height below the minimum, and leaves a missing height missing', () => {
+    expect(withMinimumSize({ width: 300, height: 1 })).toEqual({ width: 300, height: 40 });
+    expect(withMinimumSize({ width: 1, height: 500 })).toEqual({ width: 120, height: 500 });
+    expect(withMinimumSize({ width: 300 })).not.toHaveProperty('height');
+  });
+
+  it('returns the same object when the frame is already big enough', () => {
+    const frame = { width: 120, height: 40 };
+    expect(withMinimumSize(frame)).toBe(frame);
+    const large = { width: 8000, height: 5000 };
+    expect(withMinimumSize(large)).toBe(large);
   });
 });
