@@ -177,7 +177,13 @@ export function BoardToolbar({
           <ZoomIcon />
         </Button>
         <Separator />
-        <Button variant="ghost" padding="small" ariaLabel="Zoom to fit all stories" onClick={onFit} disabled={!canFit}>
+        <Button
+          variant="ghost"
+          padding="small"
+          ariaLabel="Zoom to fit stories and comments"
+          onClick={onFit}
+          disabled={!canFit}
+        >
           <ZoomResetIcon />
         </Button>
       </Toolbar>

@@ -16,12 +16,13 @@ import { BOARD_MODES, type BoardMode } from '../board/modes';
 import type { UndoEntry } from '../board/undo-stack';
 import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect } from '../board/frame-defaults';
 import { type StoryTitle, storyTitle, storyTitleFromId } from '../board/story-title';
+import { pinBounds } from '../board/comment-pins';
 import { boundsOf, worldRectToScreen } from '../board/viewport';
 import type { CanvasFile } from '../canvas-file';
 import { CanvasRequestError, type ChannelLike, requestCanvas } from '../channel';
 import { BoardNotice, type BoardNoticeContent } from './board/BoardNotice';
 import { BoardToolbar } from './board/BoardToolbar';
-import { CommentLayer } from './board/CommentLayer';
+import { CommentLayer, PIN_SIZE } from './board/CommentLayer';
 import { FrameBody } from './board/FrameBody';
 import { FrameChrome, type GestureHandlers, type ResizeEdge } from './board/FrameChrome';
 import { type ModeHandlers, ModeLayer } from './board/ModeLayer';
@@ -145,9 +146,14 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     if (canvasRef.current) pinStyle(canvasRef.current, SURFACE_BOX);
   }, [canvasRef]);
 
+  // Zoom to fit covers the frames and the open comment pins outside them (task 7a).
   const bounds = useMemo(
-    () => boundsOf(frames.map((frame) => frameRect(frame, heights.get(frame.id)))),
-    [frames, heights],
+    () =>
+      boundsOf([
+        ...frames.map((frame) => frameRect(frame, heights.get(frame.id))),
+        ...pinBounds(canvas.comments, new Map(frames.map((frame) => [frame.id, frame])), PIN_SIZE),
+      ]),
+    [frames, heights, canvas.comments],
   );
   const measured = frames.every((frame) => heights.has(frame.id));
   const board = useBoardView(canvas.id, size, bounds, measured);
@@ -545,7 +551,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         onZoomOut={() => board.zoomStep(-1)}
         onResetZoom={() => board.zoomTo(1)}
         onFit={board.fit}
-        canFit={frames.length > 0}
+        canFit={bounds !== undefined}
         mode={mode}
         modes={keyState.modes}
         onModeChange={(next) => {

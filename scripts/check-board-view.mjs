@@ -80,7 +80,7 @@ await previewFrame(page).getByRole('button', { name: 'Zoom out' }).click();
 await previewFrame(page).getByRole('button', { name: 'Zoom out' }).click();
 t = await boardState(page);
 check('toolbar zoom out twice reaches 75%', near(t.view.zoom, 0.75, 1e-6), t.view);
-await previewFrame(page).getByRole('button', { name: 'Zoom to fit all stories' }).click();
+await previewFrame(page).getByRole('button', { name: 'Zoom to fit stories and comments' }).click();
 t = await boardState(page);
 check('zoom to fit changes the view', t.view.zoom > 0 && t.view.zoom <= 1, t.view);
 

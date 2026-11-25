@@ -7,6 +7,7 @@ import {
   anchorStoryId,
   describeAnchor,
   describeTarget,
+  pinBounds,
   pinPlacement,
   sortComments,
   stackIndexes,
@@ -144,4 +145,36 @@ describe('timeAgo', () => {
     ['2026-10-01T12:00:00.000Z', '2026-10-01'],
     ['2026-11-25T12:05:00.000Z', 'just now'],
   ])('%s is %s', (iso, text) => expect(timeAgo(iso, now)).toBe(text));
+});
+
+describe('pinBounds', () => {
+  const comment = (id: string, anchor: Anchor, status: 'open' | 'resolved' = 'open'): Comment => ({
+    id,
+    author: 'user',
+    body: id,
+    status,
+    ...(status === 'resolved' ? { resolvedAt: '2026-11-25T12:00:00.000Z' } : {}),
+    anchor,
+    createdAt: '2026-11-25T12:00:00.000Z',
+    replies: [],
+  });
+
+  it('boxes open position pins and frame pins with an offset, drawn above their point', () => {
+    const boxes = pinBounds(
+      [
+        comment('comment-pos', { type: 'position', x: -200, y: -150 }),
+        comment('comment-frame', { type: 'frame', frameId: 'frame_hdr', storyId: 's', x: 1200, y: 40 }),
+        comment('comment-corner', { type: 'frame', frameId: 'frame_hdr', storyId: 's' }),
+        comment('comment-el', elementAnchor),
+        comment('comment-gone', { type: 'frame', frameId: 'frame_gone', storyId: 's', x: 5, y: 5 }),
+        comment('comment-done', { type: 'position', x: 5000, y: 5000 }, 'resolved'),
+      ],
+      frames,
+      28,
+    );
+    expect(boxes).toEqual([
+      { x: -200, y: -178, width: 28, height: 28 },
+      { x: 1620, y: 22, width: 28, height: 28 },
+    ]);
+  });
 });

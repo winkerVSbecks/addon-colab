@@ -11,7 +11,7 @@
  * still shows in the list.
  */
 import type { Anchor, Comment, ElementTarget } from '../canvas-file';
-import type { Point } from './viewport';
+import type { Point, Rect } from './viewport';
 
 export interface PinFrame {
   id: string;
@@ -66,6 +66,27 @@ export function pinPlacement(
     };
   }
   return { state: resolved.kind, point: { x: frame.x, y: frame.y }, frameId: frame.id };
+}
+
+/**
+ * World boxes of the open comments' pins that can lie outside every frame, for zoom to fit:
+ * `position` anchors and `frame` anchors with an offset (an element pin sits on its element, inside
+ * its frame, and a pin at a frame's corner is inside it too). A pin is drawn above and to the right
+ * of its point, `pinSize` world units square (zoom 1); fitting at a smaller zoom only adds margin.
+ */
+export function pinBounds(
+  comments: readonly Comment[],
+  frames: ReadonlyMap<string, PinFrame>,
+  pinSize: number,
+): Rect[] {
+  return comments.flatMap((comment) => {
+    if (comment.status !== 'open') return [];
+    const { anchor } = comment;
+    if (anchor.type === 'element' || (anchor.type === 'frame' && anchor.x === undefined)) return [];
+    const placement = pinPlacement(anchor, frames, () => ({ kind: 'pending' }));
+    if (placement.state === 'orphan') return [];
+    return [{ x: placement.point.x, y: placement.point.y - pinSize, width: pinSize, height: pinSize }];
+  });
 }
 
 /**
