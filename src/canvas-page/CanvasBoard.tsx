@@ -548,7 +548,11 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         canFit={frames.length > 0}
         mode={mode}
         modes={keyState.modes}
-        onModeChange={changeMode}
+        onModeChange={(next) => {
+          changeMode(next);
+          // The board takes focus, so Space pans and keys act on the board at once.
+          rootRef.current?.focus({ preventScroll: true });
+        }}
         commentCount={comments.openCount}
         commentsOpen={comments.layer.listOpen}
         onToggleComments={comments.layer.toggleList}

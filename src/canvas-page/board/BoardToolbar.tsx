@@ -7,10 +7,13 @@
  * percentage and resets to 100%). Storybook's own toolbar zoom scales the whole preview iframe, so
  * the board has its own controls inside the preview.
  *
- * The mode switcher (select / comment / draw, `src/board/modes.ts`) comes first: one `ToggleButton`
- * per mode, `pressed` for the current one, the way the manager's toolbar toggles work (e.g. the
- * outline and measure tools, `code/core/src/outline/OutlineSelector.tsx` and `code/core/src/measure/Tool.tsx`). It is shown once the
- * board offers more than one mode.
+ * The mode switcher (select / comment / draw, `src/board/modes.ts`) comes first: Storybook
+ * `ToggleButton`s styled like the manager's toolbar toggles (e.g. the outline and measure tools,
+ * `code/core/src/outline/OutlineSelector.tsx` and `code/core/src/measure/Tool.tsx`), but with radio
+ * semantics, since exactly one mode is on: a `radiogroup` of `radio`s. Inside Storybook's `Toolbar`
+ * the arrow keys move focus across all its controls (react-aria's toolbar, as in the WAI-ARIA
+ * toolbar pattern) and Space or Enter checks the focused mode. It is shown once the board offers
+ * more than one mode.
  */
 import React, { useEffect } from 'react';
 
@@ -48,6 +51,10 @@ export interface BoardToolbarProps {
   mode?: BoardMode;
   /** The modes the board offers, in switcher order (the switcher shows with two or more). */
   modes?: readonly BoardMode[];
+  /**
+   * A mode was chosen with a click, Space or Enter. The board then takes focus back, so Space pans
+   * at once.
+   */
   onModeChange?: (mode: BoardMode) => void;
   /** Open comments on the canvas (shown on the comment list button). */
   commentCount?: number;
@@ -79,6 +86,8 @@ const Floating = styled.div(({ theme }) => ({
   },
 }));
 
+const ModeGroup = styled.span({ display: 'inline-flex', alignItems: 'center', gap: 2 });
+
 const Count = styled.span({ fontVariantNumeric: 'tabular-nums', marginLeft: 2 });
 
 const Percent = styled(Button)({
@@ -108,20 +117,24 @@ export function BoardToolbar({
       <Toolbar aria-label="Canvas tools" innerStyle={{ gap: 2, paddingInline: 4 }}>
         {modes.length > 1 && (
           <>
-            {modes.map((option) => (
-              <ToggleButton
-                key={option}
-                variant="ghost"
-                padding="small"
-                pressed={option === mode}
-                ariaLabel={MODE_LABELS[option]}
-                tooltip={`${MODE_LABELS[option]} (${MODE_SHORTCUTS[option].toUpperCase()})`}
-                data-colab-mode={option}
-                onClick={() => onModeChange?.(option)}
-              >
-                {MODE_ICONS[option]}
-              </ToggleButton>
-            ))}
+            <ModeGroup role="radiogroup" aria-label="Board mode">
+              {modes.map((option) => (
+                <ToggleButton
+                  key={option}
+                  role="radio"
+                  variant="ghost"
+                  padding="small"
+                  pressed={option === mode}
+                  tabIndex={option === mode ? 0 : -1}
+                  ariaLabel={MODE_LABELS[option]}
+                  tooltip={`${MODE_LABELS[option]} (${MODE_SHORTCUTS[option].toUpperCase()})`}
+                  data-colab-mode={option}
+                  onClick={() => onModeChange?.(option)}
+                >
+                  {MODE_ICONS[option]}
+                </ToggleButton>
+              ))}
+            </ModeGroup>
             <Separator />
           </>
         )}
