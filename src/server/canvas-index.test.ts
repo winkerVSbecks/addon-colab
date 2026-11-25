@@ -7,7 +7,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { createCanvasFile, serializeCanvasFile } from '../canvas-file';
 import { CANVAS_TAG, INVALID_CANVAS_TAG, canvasMetaId, canvasStoryId } from '../canvas-entry';
-import { canvasCsfStub, canvasFilePattern, canvasVitePlugin, createCanvasIndexer } from './canvas-index';
+import {
+  canvasCsfStub,
+  canvasEntryPresets,
+  canvasFilePattern,
+  canvasVitePlugin,
+  createCanvasIndexer,
+} from './canvas-index';
 
 let dir: string;
 
@@ -139,5 +145,28 @@ describe('canvas CSF stub', () => {
     expect(resolve.handler(join(dir, 'gone.json'))).toBe(join(dir, 'gone.json'));
     expect(resolve.handler('./gone.json')).toBeNull();
     expect(resolve.handler(join(dir, '..', 'x.json'))).toBeNull();
+  });
+});
+
+describe('canvas entries in a static build', () => {
+  const presets = () => canvasEntryPresets<{ configType?: 'DEVELOPMENT' | 'PRODUCTION' }>(() => dir);
+
+  it('indexes canvas files on the dev server', async () => {
+    const file = await write('board.json', serializeCanvasFile(createCanvasFile({ id: 'board', name: 'Board' })));
+    const [indexer] = await presets().experimental_indexers([], { configType: 'DEVELOPMENT' });
+    expect(await indexer!.createIndex(file, { makeTitle: (title?: string) => title ?? '' })).toHaveLength(1);
+    expect(await presets().stories([], { configType: 'DEVELOPMENT' })).toHaveLength(1);
+  });
+
+  it('adds no stories entry and indexes nothing, even for files a project glob covers', async () => {
+    const file = await write('board.json', serializeCanvasFile(createCanvasFile({ id: 'board', name: 'Board' })));
+    const broken = await write('broken.json', '{');
+    expect(await presets().stories([], { configType: 'PRODUCTION' })).toEqual([]);
+    const [indexer] = await presets().experimental_indexers([], { configType: 'PRODUCTION' });
+    // Still claims the files, so Storybook does not fail with "no matching indexer".
+    expect(indexer!.test.test(file)).toBe(true);
+    for (const fileName of [file, broken]) {
+      expect(await indexer!.createIndex(fileName, { makeTitle: (title?: string) => title ?? '' })).toEqual([]);
+    }
   });
 });

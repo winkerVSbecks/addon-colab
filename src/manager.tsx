@@ -10,7 +10,15 @@ import { leaveCanvas, leaveRemovedCanvas } from './manager/navigation';
 
 const CANVAS_TOOL_ID = `${ADDON_ID}/canvases`;
 
+/**
+ * Canvases live on the dev server (`storybook dev`). A static build (`storybook build`) has no canvas
+ * server and no canvas entries, so the addon adds nothing to its manager.
+ */
+const hasCanvasServer = (globalThis as { CONFIG_TYPE?: string }).CONFIG_TYPE !== 'PRODUCTION';
+
 addons.register(ADDON_ID, (api) => {
+  if (!hasCanvasServer) return;
+
   // Canvases toolbar menu (task 5): new, rename, delete, and the list of canvases.
   addons.add(CANVAS_TOOL_ID, {
     type: types.TOOL,

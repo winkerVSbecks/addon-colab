@@ -95,11 +95,17 @@ export function canvasIndexInput(fileName: string, info: CanvasEntryInfo): Story
   };
 }
 
-/** The indexer for canvas files in `dir`. */
-export function createCanvasIndexer(dir: string): Indexer {
+/**
+ * The indexer for canvas files in `dir`. With `published` (a `storybook build`) it claims canvas
+ * files but indexes nothing: the project's own `stories` globs can still cover the canvas folder
+ * (`./canvases/*.json`), and without an indexer for them Storybook would fail with "no matching
+ * indexer". Canvases need the dev server, so a static build must not publish them as broken pages.
+ */
+export function createCanvasIndexer(dir: string, { published = false }: { published?: boolean } = {}): Indexer {
   return {
     test: canvasFilePattern(dir),
     createIndex: async (fileName) => {
+      if (published) return [];
       try {
         const info = await readCanvasEntryInfo(fileName);
         return info ? [canvasIndexInput(fileName, info)] : [];
@@ -166,14 +172,16 @@ type CanvasPresetOptions = { configType?: 'DEVELOPMENT' | 'PRODUCTION' };
 /**
  * The preset hooks for canvas entries, given how the preset finds the canvas directory. Canvases
  * need the dev server (the store lives there), so `storybook build` gets no canvas entries at all
- * rather than pages that cannot load.
+ * rather than pages that cannot load: the canvas folder is not added to `stories`, and the indexer
+ * returns nothing even when the project's own globs cover the folder. The Vite plugin stays, so a
+ * covered canvas file is still bundled as a harmless stub instead of being parsed as JSON.
  */
 export function canvasEntryPresets<O extends CanvasPresetOptions>(dirFor: (options: O) => string) {
   return {
     stories: async (entries: StoriesEntry[] = [], options: O): Promise<StoriesEntry[]> =>
       options.configType === 'PRODUCTION' ? entries : [...entries, canvasStoriesEntry(dirFor(options))],
     experimental_indexers: async (existing: Indexer[] = [], options: O): Promise<Indexer[]> => [
-      createCanvasIndexer(dirFor(options)),
+      createCanvasIndexer(dirFor(options), { published: options.configType === 'PRODUCTION' }),
       ...existing,
     ],
     viteFinal: async <C extends { plugins?: unknown[] }>(config: C, options: O): Promise<C> => ({
