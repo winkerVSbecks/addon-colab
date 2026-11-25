@@ -37,6 +37,7 @@ import { useComments } from './board/use-comments';
 // Drawing (task 8): strokes over the frames, and draw mode's tool.
 import { DEFAULT_DRAW_SETTINGS, DRAW_COLORS, DRAW_WIDTHS, DrawOptions } from './board/DrawOptions';
 import { StrokeLayer, type StrokeLayerHandle } from './board/StrokeLayer';
+import { LAYER_BOX, pinStyle } from './board/layer-box';
 import { useDrawTool } from './board/use-draw-tool';
 import { useStrokes } from './board/use-strokes';
 
@@ -70,15 +71,13 @@ const Surface = styled.canvas({
   width: '100%',
   height: '100%',
   display: 'block',
-  // Story CSS shares this document: a `canvas { … }` rule must not move the stories off the strokes.
-  maxWidth: 'none',
-  maxHeight: 'none',
-  margin: 0,
-  padding: 0,
-  border: 0,
-  opacity: 1,
-  transform: 'none',
 });
+
+/**
+ * Story CSS shares this document: a `canvas { … }` rule, even with an id, `:root` or `!important`,
+ * must not move the stories off the strokes. Pinned inline with `!important` (see `layer-box.ts`).
+ */
+const SURFACE_BOX = { ...LAYER_BOX, 'z-index': 'auto', 'pointer-events': 'auto' };
 
 /** Frame titles, outlines and handles, above the canvas; only the controls themselves catch the pointer. */
 const ChromeLayer = styled.div({
@@ -142,6 +141,9 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   }, [canvas.frames, raisedId]);
   const scene = useRef<PaintScene>(null as unknown as PaintScene);
   const { canvasRef, size, paint } = useDrawableCanvas(rootRef, scene);
+  useLayoutEffect(() => {
+    if (canvasRef.current) pinStyle(canvasRef.current, SURFACE_BOX);
+  }, [canvasRef]);
 
   const bounds = useMemo(
     () => boundsOf(frames.map((frame) => frameRect(frame, heights.get(frame.id)))),

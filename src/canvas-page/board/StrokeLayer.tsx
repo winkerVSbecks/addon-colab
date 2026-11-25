@@ -8,14 +8,21 @@
  * in its hit-testing. One canvas holds the saved strokes (redrawn when they or the view change); the
  * other holds only the stroke being drawn, redrawn once per animation frame while the pen moves.
  * Neither catches the pointer.
+ *
+ * Every stroke is drawn over a thin outline in white or near-black (`src/board/stroke-halo.ts`), so
+ * every colour, including Ink in the dark theme, stays visible over white stories and the dark
+ * board alike. The outline is a constant 1.5 screen px wide. Saved strokes keep their `Path2D`, so
+ * the second pass costs one more `stroke()` per stroke, not a second trace.
  */
 import React, { forwardRef, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 
 import { styled } from 'storybook/theming/emotion';
 
+import { HALO_SCREEN_PX, haloFor, parseRgb } from '../../board/stroke-halo';
 import { THEME_INK } from '../../board/strokes';
 import type { Size, Viewport } from '../../board/viewport';
 import type { Stroke } from '../../canvas-file';
+import { LAYER_BOX, pinStyle } from './layer-box';
 
 type DrawableStroke = Pick<Stroke, 'color' | 'width' | 'points'>;
 
@@ -38,26 +45,20 @@ export interface StrokeLayerProps {
 }
 
 const Layer = styled.canvas({
-  // Story CSS shares this document: set everything a `canvas { … }` rule could change.
   position: 'absolute',
   inset: 0,
   zIndex: 1,
   display: 'block',
   width: '100%',
   height: '100%',
-  maxWidth: 'none',
-  maxHeight: 'none',
-  margin: 0,
-  padding: 0,
-  border: 0,
-  background: 'transparent',
   pointerEvents: 'none',
-  opacity: 1,
-  transform: 'none',
 });
 
+/** Pinned inline with `!important` (see `layer-box.ts`): no story rule can move the strokes off the stories. */
+const STROKE_LAYER_BOX = { ...LAYER_BOX, 'z-index': '1', 'pointer-events': 'none' };
+
 /** Strokes through the midpoints of their points, so a simplified stroke still reads as a smooth line. */
-export function traceStroke(ctx: CanvasRenderingContext2D, points: DrawableStroke['points']) {
+export function traceStroke(ctx: CanvasRenderingContext2D | Path2D, points: DrawableStroke['points']) {
   const [first, ...rest] = points;
   if (!first) return;
   ctx.moveTo(first[0], first[1]);
@@ -74,25 +75,79 @@ export function traceStroke(ctx: CanvasRenderingContext2D, points: DrawableStrok
   if (last) ctx.lineTo(last[0], last[1]);
 }
 
-export function drawStroke(ctx: CanvasRenderingContext2D, stroke: DrawableStroke, ink: string, alpha = 1) {
+/** A stroke colour and the outline under it, resolved once per colour string. */
+interface Paint {
+  color: string;
+  halo: string;
+}
+
+const paints = new Map<string, Paint>();
+
+/** Resolves any CSS colour the 2D context accepts (named colours too) to the outline it needs. */
+function paintFor(ctx: CanvasRenderingContext2D, color: string): Paint {
+  let paint = paints.get(color);
+  if (!paint) {
+    let rgb = parseRgb(color);
+    if (!rgb) {
+      ctx.fillStyle = '#000';
+      ctx.fillStyle = color;
+      rgb = parseRgb(String(ctx.fillStyle)) ?? [0, 0, 0];
+    }
+    paint = { color, halo: haloFor(rgb) };
+    if (paints.size > 256) paints.clear();
+    paints.set(color, paint);
+  }
+  return paint;
+}
+
+/** Paths of saved strokes (their points never change), so a redraw does not re-trace them. */
+const paths = new WeakMap<DrawableStroke['points'], Path2D>();
+
+function pathOf(points: DrawableStroke['points'], cache: boolean): Path2D {
+  let path = cache ? paths.get(points) : undefined;
+  if (!path) {
+    path = new Path2D();
+    traceStroke(path, points);
+    if (cache) paths.set(points, path);
+  }
+  return path;
+}
+
+/**
+ * Draws one stroke over its outline. `zoom` keeps the outline 1.5 screen px wide; `cache` keeps the
+ * stroke's path for the next redraw (saved strokes only: the live stroke's points grow in place).
+ */
+export function drawStroke(
+  ctx: CanvasRenderingContext2D,
+  stroke: DrawableStroke,
+  ink: string,
+  { alpha = 1, zoom = 1, cache = false }: { alpha?: number; zoom?: number; cache?: boolean } = {},
+) {
   if (stroke.points.length === 0) return;
-  const color = stroke.color === THEME_INK ? ink : stroke.color;
+  const { color, halo } = paintFor(ctx, stroke.color === THEME_INK ? ink : stroke.color);
+  const outline = (2 * HALO_SCREEN_PX) / zoom;
   ctx.globalAlpha = alpha;
   if (stroke.points.length === 1) {
     const [x, y] = stroke.points[0]!;
+    ctx.fillStyle = halo;
+    ctx.beginPath();
+    ctx.arc(x, y, (stroke.width + outline) / 2, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(x, y, stroke.width / 2, 0, Math.PI * 2);
     ctx.fill();
     return;
   }
-  ctx.strokeStyle = color;
-  ctx.lineWidth = stroke.width;
+  const path = pathOf(stroke.points, cache);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  ctx.beginPath();
-  traceStroke(ctx, stroke.points);
-  ctx.stroke();
+  ctx.strokeStyle = halo;
+  ctx.lineWidth = stroke.width + outline;
+  ctx.stroke(path);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = stroke.width;
+  ctx.stroke(path);
 }
 
 /** Sizes the canvas backing to the board at the device pixel ratio; returns a context in world coordinates. */
@@ -127,7 +182,7 @@ export const StrokeLayer = forwardRef<StrokeLayerHandle, StrokeLayerProps>(funct
     if (!canvas) return;
     const { view: v, size: s, ink: i } = latest.current;
     const ctx = prepare(canvas, s, v);
-    if (ctx && live.current) drawStroke(ctx, live.current, i);
+    if (ctx && live.current) drawStroke(ctx, live.current, i, { zoom: v.zoom });
   };
 
   useImperativeHandle(ref, () => ({
@@ -137,7 +192,10 @@ export const StrokeLayer = forwardRef<StrokeLayerHandle, StrokeLayerProps>(funct
     },
   }));
 
-  useLayoutEffect(() => () => cancelAnimationFrame(frame.current), []);
+  useLayoutEffect(() => {
+    for (const canvas of [savedRef.current, liveRef.current]) if (canvas) pinStyle(canvas, STROKE_LAYER_BOX);
+    return () => cancelAnimationFrame(frame.current);
+  }, []);
 
   // Saved strokes: redrawn in the same commit as the view, so they move with the frames.
   useLayoutEffect(() => {
@@ -145,7 +203,9 @@ export const StrokeLayer = forwardRef<StrokeLayerHandle, StrokeLayerProps>(funct
     if (!canvas || size.width === 0) return;
     const ctx = prepare(canvas, size, view);
     if (!ctx) return;
-    for (const stroke of strokes) drawStroke(ctx, stroke, ink, fadedIds?.has(stroke.id) ? 0.25 : 1);
+    for (const stroke of strokes) {
+      drawStroke(ctx, stroke, ink, { alpha: fadedIds?.has(stroke.id) ? 0.25 : 1, zoom: view.zoom, cache: true });
+    }
     drawLive();
   }, [view, size, strokes, ink, fadedIds]);
 
