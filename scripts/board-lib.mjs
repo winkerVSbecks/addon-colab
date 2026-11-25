@@ -1,0 +1,103 @@
+// Shared helpers for the board browser checks (task 6). They drive the installed Chrome through
+// playwright-core: Playwright's bundled Chromium has no HTML-in-Canvas. playwright-core is not a
+// dependency of the addon; install it once with
+//   mkdir -p spike/.tools && cd spike/.tools && echo '{"private":true}' > package.json && npm i playwright-core
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(fileURLToPath(new URL('../spike/.tools/package.json', import.meta.url)));
+export const { chromium } = require('playwright-core');
+
+export const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+export const SB = process.env.SB ?? 'http://127.0.0.1:6160';
+
+let failures = 0;
+export function check(name, ok, detail) {
+  if (ok) console.log(`  ok   ${name}`);
+  else {
+    failures += 1;
+    console.log(`  FAIL ${name}${detail === undefined ? '' : `: ${JSON.stringify(detail)}`}`);
+  }
+}
+export function done() {
+  console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
+  process.exitCode = failures ? 1 : 0;
+}
+
+export async function launch({ headless = true, dpr = 2, colorScheme = 'light', width = 1400, height = 900 } = {}) {
+  const browser = await chromium.launch({ executablePath: CHROME, headless });
+  const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: dpr, colorScheme });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => message.type() === 'error' && errors.push(message.text()));
+  return { browser, context, page, errors };
+}
+
+export function previewFrame(page) {
+  return page.frames().find((frame) => frame.url().includes('/iframe.html'));
+}
+
+/** Waits for the board and every frame's story to have rendered. */
+export async function waitForBoard(page, frameCount) {
+  await page.waitForFunction(
+    (count) => {
+      const doc = document.querySelector('#storybook-preview-iframe')?.contentDocument;
+      const board = doc?.querySelector('[data-colab-board]');
+      if (!board || board.style.visibility === 'hidden') return false;
+      const frames = [...doc.querySelectorAll('[data-colab-frame]')];
+      return frames.length === count && frames.every((frame) => frame.textContent.trim().length > 0);
+    },
+    frameCount,
+    { timeout: 20000 },
+  );
+  await page.waitForTimeout(300);
+}
+
+/** Board state from the preview: viewport, frames as drawn, and the iframe's offset in the page. */
+export async function boardState(page) {
+  const iframe = await page.$('#storybook-preview-iframe');
+  const box = await iframe.boundingBox();
+  const state = await previewFrame(page).evaluate(() => {
+    const board = document.querySelector('[data-colab-board]');
+    return JSON.parse(board.dataset.colabBoardState ?? 'null');
+  });
+  return { ...state, iframe: box };
+}
+
+/**
+ * The page point of the centre of `selector` inside a frame, computed from the board model only
+ * (frame position, viewport and the element's layout offsets), not from the drawn geometry under test.
+ */
+export async function modelPoint(page, frameId, selector) {
+  const { iframe } = await boardState(page);
+  const local = await previewFrame(page).evaluate(
+    ({ frameId, selector }) => {
+      const board = document.querySelector('[data-colab-board]');
+      const state = JSON.parse(board.dataset.colabBoardState);
+      const frame = state.frames.find((f) => f.id === frameId);
+      const body = document.querySelector(`[data-colab-frame="${frameId}"]`);
+      const target = body.querySelector(selector);
+      let x = 0;
+      let y = 0;
+      for (let node = target; node && node !== body; node = node.offsetParent) {
+        x += node.offsetLeft;
+        y += node.offsetTop;
+        if (node.offsetParent && !body.contains(node.offsetParent)) break;
+      }
+      const boardRect = board.getBoundingClientRect();
+      const wx = frame.x + x + target.offsetWidth / 2;
+      const wy = frame.y + y + target.offsetHeight / 2;
+      return { x: boardRect.left + state.view.x + wx * state.view.zoom, y: boardRect.top + state.view.y + wy * state.view.zoom };
+    },
+    { frameId, selector },
+  );
+  return { x: iframe.x + local.x, y: iframe.y + local.y };
+}
+
+export async function setView(page, canvasId, view) {
+  await page.evaluate(
+    ({ canvasId, view }) => localStorage.setItem(`addon-colab:board-view:${canvasId}`, JSON.stringify(view)),
+    { canvasId, view },
+  );
+}
