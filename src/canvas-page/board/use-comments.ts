@@ -161,11 +161,22 @@ export function useComments({
     if (openId && !comments.some((c) => c.id === openId)) setOpenId(null);
   }, [comments, openId]);
 
-  // Leaving comment mode drops the highlight and an unsent draft.
+  // What is typed in the draft's composer. A draft with text is never dropped behind the user's
+  // back (switching mode, opening another thread); only Cancel, Escape or saving it ends it.
+  const draftText = useRef('');
+  const setDraftText = useCallback((text: string) => {
+    draftText.current = text;
+  }, []);
+  const draftHasText = () => draftText.current.trim().length > 0;
+  useEffect(() => {
+    if (!draft) draftText.current = '';
+  }, [draft]);
+
+  // Leaving comment mode drops the highlight, and the draft unless something is typed in it.
   useEffect(() => {
     if (!active) {
       setHover(null);
-      setDraft(null);
+      if (!draftHasText()) setDraft(null);
     }
   }, [active]);
 
@@ -436,7 +447,7 @@ export function useComments({
       const comment = pin?.comment ?? comments.find((c) => c.id === commentId);
       if (!comment) return;
       if (comment.status === 'resolved') setShowResolved(true);
-      setDraft(null);
+      if (!draftHasText()) setDraft(null);
       setOpenId(commentId);
       const placement =
         pin?.placement ?? pinPlacement(comment.anchor, frameMap, () => offsets.get(commentId) ?? { kind: 'pending' });
@@ -465,6 +476,7 @@ export function useComments({
       setShowResolved,
       submitDraft,
       cancelDraft,
+      setDraftText,
       reply,
       setResolved,
       remove,

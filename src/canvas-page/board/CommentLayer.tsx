@@ -244,6 +244,7 @@ function Composer({
   autoFocus,
   disabled,
   name,
+  onTextChange,
 }: {
   placeholder: string;
   submitLabel: string;
@@ -252,8 +253,14 @@ function Composer({
   autoFocus?: boolean;
   disabled?: boolean;
   name: string;
+  /** Called with the text as it is typed (and with '' once it is sent). */
+  onTextChange?: (text: string) => void;
 }) {
-  const [body, setBody] = useState('');
+  const [body, setBodyState] = useState('');
+  const setBody = (text: string) => {
+    setBodyState(text);
+    onTextChange?.(text);
+  };
   const [busy, setBusy] = useState(false);
   const empty = body.trim().length === 0;
   const submit = () => {
@@ -496,6 +503,7 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
                   disabled={draft.loading}
                   onSubmit={state.submitDraft}
                   onCancel={state.cancelDraft}
+                  onTextChange={state.setDraftText}
                 />
               </Card>
             </Popover>
