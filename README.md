@@ -17,6 +17,31 @@ Simplify the creation of Storybook addons
 
 If you have an existing addon that you want to migrate to support the latest version of Storyboook, you can check out the [addon migration guide](https://storybook.js.org/docs/addons/addon-migration-guide).
 
+## Connect your agent
+
+While `storybook dev` is running, the addon serves an MCP endpoint at `/colab/mcp` on the same address, for example `http://localhost:6006/colab/mcp`. Your agent can list canvases, read comments (each names its story file, selector, HTML and text), add comments, reply, and resolve or reopen them. Agent comments show up on the open canvas right away.
+
+Claude Code:
+
+```sh
+claude mcp add --transport http storybook-colab http://localhost:6006/colab/mcp
+```
+
+Any other MCP client that supports streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "storybook-colab": {
+      "type": "http",
+      "url": "http://localhost:6006/colab/mcp"
+    }
+  }
+}
+```
+
+Use the port your Storybook runs on. The endpoint only exists in `storybook dev` (not in a static build), has no authentication, and refuses requests from web pages on other origins. It uses a different path from `@storybook/addon-mcp` (`/mcp`), so both can be installed together.
+
 ## Getting Started
 
 Click the **Use this template** button to get started.
