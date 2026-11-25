@@ -24,6 +24,7 @@ import {
   authorSchema,
   type CanvasFile,
   canvasIdFromName,
+  commentSchema,
   createCanvasFile,
   createId,
   frameSchema,
@@ -556,6 +557,19 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
         return { canvas: { ...current, comments: current.comments.filter((c) => c.id !== commentId) }, result: null };
       });
       return { canvas };
+    },
+
+    async restoreComment({ canvasId, comment, index }) {
+      const input = parseInput(commentSchema, comment, 'comment');
+      const at = index === undefined ? undefined : parseInput(z.number().int().min(0), index, 'index');
+      const { canvas } = await mutate(canvasId, (current) => {
+        if (current.comments.some((c) => c.id === input.id)) {
+          throw new CanvasStoreError('ALREADY_EXISTS', `Comment "${input.id}" is already on canvas "${canvasId}"`);
+        }
+        const position = Math.min(at ?? current.comments.length, current.comments.length);
+        return { canvas: { ...current, comments: current.comments.toSpliced(position, 0, input) }, result: null };
+      });
+      return { canvas, comment: input };
     },
 
     async addStroke({ canvasId, stroke }) {

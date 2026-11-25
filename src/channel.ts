@@ -106,6 +106,15 @@ export interface CanvasOperations {
   resolveComment: { args: { canvasId: string; commentId: string }; result: { canvas: CanvasFile; comment: Comment } };
   reopenComment: { args: { canvasId: string; commentId: string }; result: { canvas: CanvasFile; comment: Comment } };
   deleteComment: { args: { canvasId: string; commentId: string }; result: { canvas: CanvasFile } };
+  /**
+   * Puts a deleted comment back with the same id, replies, status and timestamps (undo of
+   * `deleteComment`), at `index` in `comments` (clamped; the end when absent). Fails with
+   * `ALREADY_EXISTS` when the id is on the canvas.
+   */
+  restoreComment: {
+    args: { canvasId: string; comment: Comment; index?: number };
+    result: { canvas: CanvasFile; comment: Comment };
+  };
   addStroke: { args: { canvasId: string; stroke: StrokeInput }; result: { canvas: CanvasFile; stroke: Stroke } };
   removeStroke: { args: { canvasId: string; strokeId: string }; result: { canvas: CanvasFile } };
   /**
@@ -142,6 +151,7 @@ export const CANVAS_OPERATIONS = [
   'resolveComment',
   'reopenComment',
   'deleteComment',
+  'restoreComment',
   'addStroke',
   'removeStroke',
   'restoreStrokes',

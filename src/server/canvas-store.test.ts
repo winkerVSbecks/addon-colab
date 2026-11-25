@@ -351,6 +351,34 @@ describe('comments', () => {
     await expectStoreError(store.reopenComment({ canvasId: 'board', commentId: 'comment-x' }), 'NOT_FOUND');
     await expectStoreError(store.deleteComment({ canvasId: 'board', commentId: 'comment-x' }), 'NOT_FOUND');
   });
+
+  it('restores a deleted comment with its id, replies, status and place (undo of delete)', async () => {
+    await store.create({ name: 'Board' });
+    const first = (
+      await store.addComment({ canvasId: 'board', comment: { author: 'user', body: 'a', anchor: elementAnchor } })
+    ).comment;
+    const second = (
+      await store.addComment({ canvasId: 'board', comment: { author: 'agent', body: 'b', anchor: elementAnchor } })
+    ).comment;
+    await store.addReply({ canvasId: 'board', commentId: first.id, reply: { author: 'agent', body: 'r' } });
+    const full = (await store.resolveComment({ canvasId: 'board', commentId: first.id })).comment;
+    await store.deleteComment({ canvasId: 'board', commentId: first.id });
+
+    const restored = await store.restoreComment({ canvasId: 'board', comment: full, index: 0 });
+    expect(restored.comment).toEqual(full);
+    expect(restored.canvas.comments).toEqual([full, second]);
+    await expectStoreError(store.restoreComment({ canvasId: 'board', comment: full }), 'ALREADY_EXISTS');
+    await expectStoreError(
+      store.restoreComment({ canvasId: 'board', comment: { ...full, id: 'comment-new', body: '' } }),
+      'INVALID_INPUT',
+    );
+    await expectStoreError(store.restoreComment({ canvasId: 'board', comment: full, index: -1 }), 'INVALID_INPUT');
+    await store.deleteComment({ canvasId: 'board', commentId: full.id });
+    expect((await store.restoreComment({ canvasId: 'board', comment: full, index: 99 })).canvas.comments).toEqual([
+      second,
+      full,
+    ]);
+  });
 });
 
 describe('strokes', () => {
