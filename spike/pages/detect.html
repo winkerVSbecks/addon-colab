@@ -1,0 +1,39 @@
+<!doctype html>
+<html><body>
+<canvas id="c" content="drawable" style="width:300px;height:120px;border:1px solid #888">
+  <div id="d" drawable style="width:200px;padding:8px;background:#fde;font:16px sans-serif">Hello <button id="b">btn</button></div>
+</canvas>
+<script>
+window.__detect = new Promise((resolve) => {
+  const c = document.getElementById('c');
+  const d = document.getElementById('d');
+  const ctx = c.getContext('2d');
+  const r = {
+    ua: navigator.userAgent,
+    contentProp: 'content' in c ? c.content : '(no content prop)',
+    layoutSubtreeProp: 'layoutSubtree' in c,
+    drawElementImage: typeof ctx.drawElementImage,
+    drawElement: typeof ctx.drawElement,
+    requestPaint: typeof c.requestPaint,
+    onpaint: 'onpaint' in c,
+    captureElementImage: typeof c.captureElementImage,
+    updateElementGeometry: typeof c.updateElementGeometry,
+    getElementTransform: typeof c.getElementTransform,
+    paintFired: false, drawOk: null, drawErr: null,
+  };
+  let done = false;
+  const finish = () => { if (!done) { done = true; resolve(r); } };
+  c.width = 300; c.height = 120;
+  c.addEventListener('paint', (e) => {
+    r.paintFired = true;
+    r.changedElements = (e.changedElements || []).map((x) => x.id);
+    try { ctx.reset(); ctx.drawElementImage(d, 10, 10); r.drawOk = true;
+      const px = ctx.getImageData(20, 20, 1, 1).data; r.pixel = Array.from(px);
+    } catch (err) { r.drawOk = false; r.drawErr = String(err); }
+    finish();
+  });
+  if (r.requestPaint === 'function') c.requestPaint();
+  setTimeout(finish, 2000);
+});
+</script>
+</body></html>
