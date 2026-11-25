@@ -8,6 +8,8 @@ import { CANVAS_FILE, SB, boardState, check, done, launch, previewFrame, resetCa
 
 const read = () => JSON.parse(readFileSync(CANVAS_FILE, 'utf8'));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const byId = (frames) => [...frames].sort((a, b) => a.id.localeCompare(b.id));
+const order = (frames) => frames.map((f) => f.id).join(' ');
 await resetCanvas();
 
 const { browser, page, errors } = await launch({ dpr: 2 });
@@ -37,7 +39,9 @@ check('frame is gone from the board', (await preview.locator('[data-colab-frame=
 await notice.locator('button').click();
 await waitForBoard(page, 3);
 await page.waitForTimeout(600);
-check('Undo restores the frame with the same id, position, size and order', same(read().frames, before), { before, after: read().frames });
+check('Undo restores the frame with the same id, position and size', same(byId(read().frames), byId(before)), { before, after: read().frames });
+// Selecting the frame by its title had brought it to the front; it returns there.
+check('… and in the same place in the stacking order (on top)', order(read().frames) === 'frame_btn frame_page frame_hdr', order(read().frames));
 check('the restored frame is selected', (await boardState(page)).selectedId === 'frame_hdr');
 check('the notice is gone after Undo', (await notice.count()) === 0);
 
@@ -51,7 +55,7 @@ check('frame is gone from the file (Remove button)', !read().frames.some((f) => 
 await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
 await waitForBoard(page, 3);
 await page.waitForTimeout(600);
-check('⌘Z restores it in place (first in the order)', same(read().frames, before), read().frames.map((f) => f.id));
+check('⌘Z restores it in place', same(byId(read().frames), byId(before)) && order(read().frames) === 'frame_page frame_hdr frame_btn', order(read().frames));
 
 // 3. Undo pressed right away, before the removal has been written.
 await preview.locator('[data-colab-frame-title="frame_page"]').click();
@@ -59,12 +63,13 @@ await page.keyboard.press('Delete');
 await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
 await waitForBoard(page, 3);
 await page.waitForTimeout(800);
-check('an immediate ⌘Z still ends with the frame back', same(read().frames, before), read().frames.map((f) => f.id));
+check('an immediate ⌘Z still ends with the frame back', same(byId(read().frames), byId(before)) && order(read().frames) === 'frame_hdr frame_btn frame_page', order(read().frames));
+const settled = JSON.stringify(read().frames);
 
 // 4. ⌘Z with no notice showing does nothing.
 await page.keyboard.press(process.platform === 'darwin' ? 'Meta+z' : 'Control+z');
 await page.waitForTimeout(400);
-check('⌘Z with nothing to undo changes nothing', same(read().frames, before));
+check('⌘Z with nothing to undo changes nothing', JSON.stringify(read().frames) === settled);
 
 check('no page errors', errors.length === 0, errors);
 await browser.close();

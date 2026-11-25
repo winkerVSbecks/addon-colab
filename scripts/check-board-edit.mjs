@@ -1,7 +1,7 @@
 // Moving, resizing and removing frames: instant locally, one write per gesture, no snap-back, no
 // story remount, persisted across reload; measured heights saved; remote (hand) edits show up;
 // removal tears the story down; overlapping frames hit-test the top one.
-// Resets .sb-task6/canvases/board.json. Run: SB=http://127.0.0.1:6160 node scripts/check-board-edit.mjs
+// Resets $CANVAS_DIR/board.json (default .sb-task6/canvases). Run: SB=http://127.0.0.1:6160 node scripts/check-board-edit.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 
 import { CANVAS_FILE, SB, resetCanvas, boardState, check, done, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';
@@ -95,7 +95,8 @@ await page.waitForFunction(() => {
   return JSON.parse(board.dataset.colabBoardState).frames.find((f) => f.id === 'frame_page')?.x === 40;
 }, null, { timeout: 3000 }).then(() => check('hand edit of the file appears live', true), () => check('hand edit of the file appears live', false));
 
-// Overlapping frames: put the Button frame over the Header; the one drawn last (later in the file) is on top.
+// Overlapping frames: drag the Button frame over the Header. Dragging selects it, which brings it
+// to the front (task 6a), so the dragged frame is on top and last in the file.
 await setView(page, 'board', { x: 60, y: 60, zoom: 1 });
 await page.reload();
 await waitForBoard(page, 3);
@@ -112,7 +113,7 @@ const hit = await previewFrame(page).evaluate(({ x, y }) => {
   const el = document.elementFromPoint(r.left + state.view.x + x * state.view.zoom, r.top + state.view.y + y * state.view.zoom);
   return el?.closest('[data-colab-frame]')?.dataset.colabFrame;
 }, { x: btn.x + 30, y: btn.y + 30 });
-check('overlap hit-tests the frame on top (Header, later in the file)', hit === 'frame_hdr', hit);
+check('overlap hit-tests the frame on top (the dragged Button, now last in the file)', hit === 'frame_btn' && read().frames.at(-1).id === 'frame_btn', { hit, order: read().frames.map((f) => f.id) });
 
 // Remove with the keyboard: select the Page frame by its title, press Delete.
 const rendersBefore = await previewFrame(page).evaluate(() => window.__STORYBOOK_PREVIEW__.storyRenders.length);

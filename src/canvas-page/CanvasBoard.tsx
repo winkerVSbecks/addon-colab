@@ -10,12 +10,13 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { SELECT_STORY, STORY_UNCHANGED } from 'storybook/internal/core-events';
 import { styled, useTheme } from 'storybook/theming/emotion';
 
+import { inStableOrder, isOnTop, raiseSettled, withRaised } from '../board/frame-order';
 import { boardKeyAction, focusPlace } from '../board/keyboard';
 import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect } from '../board/frame-defaults';
 import { type StoryTitle, storyTitle, storyTitleFromId } from '../board/story-title';
 import { boundsOf, worldRectToScreen } from '../board/viewport';
 import type { CanvasFile } from '../canvas-file';
-import { type ChannelLike, requestCanvas } from '../channel';
+import { CanvasRequestError, type ChannelLike, requestCanvas } from '../channel';
 import { BoardNotice, type BoardNoticeContent } from './board/BoardNotice';
 import { BoardToolbar } from './board/BoardToolbar';
 import { FrameBody } from './board/FrameBody';
@@ -98,7 +99,14 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   const showError = useCallback((message: string) => setNotice({ message, tone: 'error' }), []);
 
   const edits = useFrameEdits(canvas, channel, showError);
-  const frames = edits.frames;
+  // Selecting a frame brings it to the front: shown at once, and kept until the file agrees.
+  const [raisedId, setRaisedId] = useState<string | null>(null);
+  const frames = useMemo(() => withRaised(edits.frames, raisedId), [edits.frames, raisedId]);
+  // The DOM keeps one order whatever the stacking: the canvas draws (and hit-tests) in `frames` order.
+  const domFrames = useMemo(() => inStableOrder(frames), [frames]);
+  useEffect(() => {
+    if (raisedId && raiseSettled(canvas.frames, raisedId)) setRaisedId(null);
+  }, [canvas.frames, raisedId]);
   const scene = useRef<PaintScene>(null as unknown as PaintScene);
   const { canvasRef, size, paint } = useDrawableCanvas(rootRef, scene);
 
@@ -149,13 +157,27 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
 
   const framesRef = useRef(frames);
   framesRef.current = frames;
+  const fileRef = useRef(canvas);
+  fileRef.current = canvas;
   const titlesRef = useRef(titles);
   titlesRef.current = titles;
 
+  const select = useCallback(
+    (frameId: string) => {
+      setSelectedId(frameId);
+      if (isOnTop(framesRef.current, frameId) || !framesRef.current.some((f) => f.id === frameId)) return;
+      setRaisedId(frameId);
+      requestCanvas(channel, 'raiseFrame', { canvasId: fileRef.current.id, frameId }).catch((error: unknown) => {
+        setRaisedId((current) => (current === frameId ? null : current));
+        if (error instanceof CanvasRequestError && error.code === 'NOT_FOUND') return;
+        showError(`Couldn't bring the story to the front: ${error instanceof Error ? error.message : String(error)}`);
+      });
+    },
+    [channel, showError],
+  );
+
   // Removing a frame: it goes at once, focus moves to the board (its title is gone), and a notice
   // offers Undo, which puts it back with the same id, position, size and place in the stacking order.
-  const fileRef = useRef(canvas);
-  fileRef.current = canvas;
   const undoRef = useRef<(() => void) | null>(null);
   const editsRemove = edits.remove;
   const editsRestore = edits.restore;
@@ -163,7 +185,8 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     (frameId: string) => {
       const frame = framesRef.current.find((f) => f.id === frameId);
       if (!frame) return;
-      const index = fileRef.current.frames.findIndex((f) => f.id === frameId);
+      // Its place in the order as shown (a frame selected by its title has just come to the front).
+      const index = framesRef.current.findIndex((f) => f.id === frameId);
       const name = titlesRef.current.get(frameId)?.short ?? storyTitleFromId(frame.storyId).short;
       const removed = editsRemove(frameId);
       rootRef.current?.focus({ preventScroll: true });
@@ -302,10 +325,11 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
 
   const openStory = useCallback((storyId: string) => channel.emit(SELECT_STORY, { storyId }), [channel]);
 
-  // Pressing inside a story selects its frame (without stopping the press: the story still gets it).
+  // Pressing inside a story selects its frame and brings it to the front (without stopping the
+  // press: the story still gets it, and its DOM node does not move).
   const onPointerDownCapture = (event: React.PointerEvent) => {
     const frameId = (event.target as Element).closest?.('[data-colab-frame]')?.getAttribute('data-colab-frame');
-    if (frameId) setSelectedId(frameId);
+    if (frameId) select(frameId);
   };
 
   return (
@@ -323,7 +347,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     >
       <Surface ref={canvasRef} {...drawableCanvasProps} aria-label={`Canvas ${canvas.name}`}>
         {preview &&
-          frames.map((frame) => (
+          domFrames.map((frame) => (
             <FrameBody
               key={frame.id}
               frameId={frame.id}
@@ -340,7 +364,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
           ))}
       </Surface>
       <ChromeLayer>
-        {frames.map((frame) => {
+        {domFrames.map((frame) => {
           const title = titles.get(frame.id) ?? storyTitleFromId(frame.storyId);
           return (
             <FrameChrome
@@ -355,7 +379,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
               title={title.short}
               fullTitle={title.full}
               selected={frame.id === selectedId}
-              onSelect={() => setSelectedId(frame.id)}
+              onSelect={() => select(frame.id)}
               move={moveHandlers(frame.id)}
               resize={(edge) => resizeHandlers(frame.id, edge)}
               onNudge={(dx, dy) => nudge(frame.id, dx, dy)}
