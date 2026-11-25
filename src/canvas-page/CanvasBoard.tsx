@@ -13,7 +13,8 @@ import { styled, useTheme } from 'storybook/theming/emotion';
 import { frameRect } from '../board/frame-defaults';
 import { boundsOf } from '../board/viewport';
 import type { CanvasFile } from '../canvas-file';
-import type { ChannelLike } from '../channel';
+import { type ChannelLike, requestCanvas } from '../channel';
+import { BoardNotice } from './board/BoardNotice';
 import { BoardToolbar } from './board/BoardToolbar';
 import { FrameBody } from './board/FrameBody';
 import { drawableCanvasProps } from './board/html-in-canvas';
@@ -21,6 +22,7 @@ import { getPreview } from './board/story-mount';
 import { useBoardView } from './board/use-board-view';
 import { type PaintScene, useDrawableCanvas } from './board/use-drawable-canvas';
 import { usePanZoom } from './board/use-pan-zoom';
+import { useStoryDrop } from './board/use-story-drop';
 
 export interface CanvasBoardProps {
   canvas: CanvasFile;
@@ -35,6 +37,15 @@ const Root = styled.div(({ theme }) => ({
   touchAction: 'none',
   outline: 'none',
   '&[data-panning]': { cursor: 'grabbing' },
+  // A story from the sidebar is over the board.
+  '&[data-drop-target]::after': {
+    content: '""',
+    position: 'absolute',
+    inset: 0,
+    zIndex: 4,
+    pointerEvents: 'none',
+    boxShadow: `inset 0 0 0 2px ${theme.color.secondary}`,
+  },
 }));
 
 const Surface = styled.canvas({
@@ -73,6 +84,22 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   const measured = frames.every((frame) => heights.has(frame.id));
   const board = useBoardView(canvas.id, size, bounds, measured);
   const { spaceHeld, panning } = usePanZoom({ root: rootRef, surface: canvasRef, board });
+  const [notice, setNotice] = useState<string | null>(null);
+  const dismissNotice = useCallback(() => setNotice(null), []);
+
+  const addFrame = useCallback(
+    async (frame: { storyId: string; x: number; y: number; width: number }) => {
+      try {
+        const result = await requestCanvas(channel, 'addFrame', { canvasId: canvas.id, frame });
+        return result.frame.id;
+      } catch (error) {
+        setNotice(`Couldn't add the story: ${error instanceof Error ? error.message : String(error)}`);
+        return undefined;
+      }
+    },
+    [channel, canvas.id],
+  );
+  const dropping = useStoryDrop({ root: rootRef, view: board.view, preview, addFrame, onError: setNotice });
 
   scene.current = {
     view: board.view,
@@ -107,6 +134,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
       data-colab-board={canvas.id}
       tabIndex={-1}
       data-panning={panning ? '' : undefined}
+      data-drop-target={dropping ? '' : undefined}
       // Read by the browser checks in scripts/: the viewport and the frames as shown.
       data-colab-board-state={JSON.stringify({ view: board.view, frames })}
       style={{ visibility: board.ready ? 'visible' : 'hidden' }}
@@ -129,6 +157,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
           ))}
       </Surface>
       {spaceHeld && <PanCatcher data-colab-pan-catcher="" />}
+      <BoardNotice message={notice} onDismiss={dismissNotice} />
       <BoardToolbar
         zoom={board.view.zoom}
         onZoomIn={() => board.zoomStep(1)}
