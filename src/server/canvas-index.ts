@@ -12,8 +12,8 @@
  *    reads the file, so a broken file cannot break the preview, and store writes cause no reload.
  */
 import { mkdirSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
-import { basename, isAbsolute } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 
 import type { Indexer, StoriesEntry, StoryIndexInput } from 'storybook/internal/types';
 import type { Plugin } from 'vite';
@@ -24,8 +24,10 @@ import {
   CANVAS_TAG,
   CANVAS_TITLE,
   INVALID_CANVAS_TAG,
+  canvasEntryName,
   canvasExportName,
   canvasMetaId,
+  canvasNameKey,
 } from '../canvas-entry';
 
 const FILE_SUFFIX = '.json';
@@ -59,7 +61,9 @@ export function canvasStoriesEntry(dir: string): StoriesEntry {
 }
 
 /** What the indexer knows about one canvas file. Exported for tests. */
-export type CanvasEntryInfo = { fileId: string; valid: true; name: string } | { fileId: string; valid: false };
+export type CanvasEntryInfo =
+  | { fileId: string; valid: true; name: string; sharedName?: boolean }
+  | { fileId: string; valid: false };
 
 /** Reads a canvas file for the sidebar. Never throws; `null` when the file is gone. */
 export async function readCanvasEntryInfo(fileName: string): Promise<CanvasEntryInfo | null> {
@@ -81,6 +85,28 @@ export async function readCanvasEntryInfo(fileName: string): Promise<CanvasEntry
   return { fileId, valid: false };
 }
 
+/**
+ * Whether another valid canvas in the same folder has this name. Storybook re-indexes only the file
+ * that changed, so the older of two canvases with one name keeps its plain label until it is next
+ * indexed; the newer one, which is indexed when it appears or is renamed, is the one marked.
+ */
+async function nameIsShared(fileName: string, fileId: string, name: string): Promise<boolean> {
+  const dir = dirname(fileName);
+  const key = canvasNameKey(name);
+  let files: string[];
+  try {
+    files = await readdir(dir);
+  } catch {
+    return false;
+  }
+  for (const file of files) {
+    if (file.startsWith('.') || !file.endsWith(FILE_SUFFIX) || canvasFileId(file) === fileId) continue;
+    const other = await readCanvasEntryInfo(join(dir, file));
+    if (other?.valid && canvasNameKey(other.name) === key) return true;
+  }
+  return false;
+}
+
 /** The index entry for a canvas file. Exported for tests. */
 export function canvasIndexInput(fileName: string, info: CanvasEntryInfo): StoryIndexInput {
   return {
@@ -90,7 +116,9 @@ export function canvasIndexInput(fileName: string, info: CanvasEntryInfo): Story
     // Stable across renames: the id comes from the file name, the sidebar label from the canvas name.
     metaId: canvasMetaId(info.fileId),
     title: CANVAS_TITLE,
-    name: info.valid ? info.name : `${info.fileId}${FILE_SUFFIX} (invalid)`,
+    name: info.valid
+      ? canvasEntryName(info.name, info.fileId, !!info.sharedName)
+      : `${info.fileId}${FILE_SUFFIX} (invalid)`,
     // Canvases are not components: keep them out of docs pages, test runs and the component
     // manifest that other tools (MCP, docs) read.
     tags: [CANVAS_TAG, ...(info.valid ? [] : [INVALID_CANVAS_TAG]), '!autodocs', '!test', '!manifest'],
@@ -110,7 +138,9 @@ export function createCanvasIndexer(dir: string, { published = false }: { publis
       if (published) return [];
       try {
         const info = await readCanvasEntryInfo(fileName);
-        return info ? [canvasIndexInput(fileName, info)] : [];
+        if (!info) return [];
+        if (info.valid) info.sharedName = await nameIsShared(fileName, info.fileId, info.name);
+        return [canvasIndexInput(fileName, info)];
       } catch (error) {
         console.error(`[addon-colab] could not index ${fileName}`, error);
         return [];

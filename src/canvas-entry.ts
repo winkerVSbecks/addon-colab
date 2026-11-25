@@ -59,6 +59,19 @@ export function canvasStoryId(fileId: string): string {
   return `${canvasMetaId(fileId)}--${canvasExportName(fileId).toLowerCase()}`;
 }
 
+/** The key two canvas names are compared by: people read "Board" and "board " as the same name. */
+export function canvasNameKey(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
+/**
+ * The sidebar label for a canvas. Canvases can share a name (made by hand, by an agent, or renamed),
+ * so when another canvas has the same name the file id is added: "Board (board-2)".
+ */
+export function canvasEntryName(name: string, fileId: string, sharedName: boolean): string {
+  return sharedName ? `${name} (${fileId})` : name;
+}
+
 /** Whether a story id belongs to a canvas entry (works after the entry has left the index). */
 export function isCanvasStoryId(storyId: string | undefined): boolean {
   return !!storyId?.startsWith(META_PREFIX);

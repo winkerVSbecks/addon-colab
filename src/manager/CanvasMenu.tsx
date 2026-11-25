@@ -9,9 +9,11 @@ import { ActionList } from 'storybook/internal/components';
 import { AlertIcon, CategoryIcon, EditIcon, PlusIcon, TrashIcon } from '@storybook/icons';
 import { styled } from 'storybook/theming/emotion';
 
+import { canvasNameKey } from '../canvas-entry';
 import { isCanvasId } from '../canvas-file';
 import type { CanvasSummary, InvalidCanvas } from '../channel';
 import type { CanvasListingState } from './use-canvas-listing';
+import { canvasDetails, duplicateNames } from './wording';
 
 export interface CanvasMenuProps {
   listing: CanvasListingState;
@@ -41,20 +43,11 @@ const Muted = styled.div(({ theme }) => ({
 
 const Warning = styled(AlertIcon)(({ theme }) => ({ color: theme.color.warning }));
 
-function plural(count: number, one: string, many = `${one}s`) {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
-export function canvasDetails(canvas: CanvasSummary): string {
-  const parts = [plural(canvas.frameCount, 'story', 'stories')];
-  if (canvas.openCommentCount) parts.push(`${canvas.openCommentCount} open`);
-  return parts.join(' · ');
-}
-
 export function CanvasMenu({ listing, currentFileId, onOpen, onNew, onRename, onDelete }: CanvasMenuProps) {
   const canvases = listing.status === 'ready' ? listing.listing.canvases : [];
   const invalid = listing.status === 'ready' ? listing.listing.invalid : [];
   const current = canvases.find((canvas) => canvas.id === currentFileId);
+  const duplicates = duplicateNames(canvases);
   // The store can only delete files named like a canvas id; others must be removed by hand.
   const currentInvalid = invalid.find((file) => file.id === currentFileId && isCanvasId(file.id));
 
@@ -109,7 +102,7 @@ export function CanvasMenu({ listing, currentFileId, onOpen, onNew, onRename, on
                 </ActionList.Icon>
                 <ActionList.Text>
                   <span>{canvas.name}</span>
-                  <small>{canvasDetails(canvas)}</small>
+                  <small>{canvasDetails(canvas, { showFile: duplicates.has(canvasNameKey(canvas.name)) })}</small>
                 </ActionList.Text>
               </ActionList.Action>
             </ActionList.Item>

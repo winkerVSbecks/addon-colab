@@ -175,3 +175,18 @@ describe('canvas entries in a static build', () => {
     }
   });
 });
+
+describe('canvases that share a name', () => {
+  it('adds the file id to the sidebar label when another canvas has the same name', async () => {
+    const first = await write('board.json', serializeCanvasFile(createCanvasFile({ id: 'board', name: 'Board' })));
+    const second = await write(
+      'board-2.json',
+      serializeCanvasFile(createCanvasFile({ id: 'board-2', name: ' board ' })),
+    );
+    const other = await write('other.json', serializeCanvasFile(createCanvasFile({ id: 'other', name: 'Other' })));
+    await write('broken.json', '{');
+    expect((await index(first))[0]!.name).toBe('Board (board)');
+    expect((await index(second))[0]!.name).toBe('board (board-2)');
+    expect((await index(other))[0]!.name).toBe('Other');
+  });
+});
