@@ -334,7 +334,7 @@ pnpm lint && pnpm typecheck
 pnpm check:browser    # browser checks in the installed Chrome (see below)
 ```
 
-The repository ships two example canvases in `.storybook/canvases/` (`sdfsd.json` and `testing.json`); they appear under **Canvases** in the sidebar when you run `pnpm storybook`.
+The repository ships two example canvases in `.storybook/canvases/` (`component-review.json` and `testing.json`); they appear under **Canvases** in the sidebar when you run `pnpm storybook`.
 
 `pnpm check:browser` runs `scripts/check-board-*.mjs`. They need Google Chrome 157+ installed (set `CHROME` to its executable if it is not in `/Applications`): Playwright's bundled Chromium has no HTML-in-Canvas. The command starts its own Storybook on port 6190 (set `PORT` to change it) from `scripts/check-storybook`, with canvases in a temporary `.sb-checks/` folder that is deleted afterwards, so it never touches `.storybook/canvases`. Pass words to run some of the checks only: `pnpm check:browser draw comments`.
 
