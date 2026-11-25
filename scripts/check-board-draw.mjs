@@ -1,5 +1,5 @@
 // Drawing on the board (task 8): draw mode, pen, eraser, undo/redo, clear-all, live remote strokes,
-// and stroke alignment proved from the stroke layer's own pixels (not from screenshots): a box drawn
+// one write per multi-stroke erase, and stroke alignment proved from the stroke layer's own pixels (not from screenshots): a box drawn
 // around a story's button must still enclose that button's getBoundingClientRect at zoom 0.5 and 2,
 // after a reload, at DPR 1 and 2, and with hostile story CSS on the page.
 // Resets $CANVAS_DIR/board.json. Run:
@@ -352,6 +352,22 @@ await page.waitForTimeout(300);
 check('Cancel keeps the strokes', read().strokes.length === 2);
 await previewFrame(page).locator('[data-colab-draw-clear]').click();
 await previewFrame(page).locator('[data-colab-clear-confirm]').click();
+{
+  // The dialog fades out after Clear: it must keep saying how many strokes it cleared.
+  const texts = new Set();
+  for (let i = 0; i < 20; i++) {
+    const text = await previewFrame(page)
+      .locator('[data-colab-clear-dialog]')
+      .textContent({ timeout: 50 })
+      .catch(() => null);
+    if (text === null) break;
+    texts.add(text.match(/(All \d+ strokes|The 1 stroke)/)?.[0]);
+    await page.waitForTimeout(20);
+  }
+  check('the fading dialog keeps its count', texts.size > 0 && [...texts].every((t) => t === 'All 2 strokes'), [
+    ...texts,
+  ]);
+}
 check('Clear drawing removes every stroke', await waitForFile((c) => c.strokes.length === 0));
 const notice = previewFrame(page).locator('[data-colab-board-notice]', { hasText: 'Cleared' });
 await notice.waitFor();
@@ -394,6 +410,58 @@ check(
     { x: iframe.width / 2, y: iframe.height / 2 },
   );
   check('remote stroke appears live', has && pixel[3] > 200 && pixel[1] > pixel[0], pixel);
+}
+
+// 9b. One eraser swipe across several strokes is one write; ⌘Z puts them all back.
+{
+  const { view, iframe } = await boardState(page);
+  const cx = (iframe.width / 2 - view.x) / view.zoom;
+  const cy = (iframe.height / 2 + 120 - view.y) / view.zoom;
+  const canvas = read();
+  const before = canvas.strokes.map((s) => s.id);
+  const bars = [-40, 0, 40].map((dx, i) => ({
+    id: `stroke_bar${i}`,
+    color: '#029CFD',
+    width: 6,
+    points: [
+      [cx + dx, cy - 40],
+      [cx + dx, cy + 40],
+    ],
+  }));
+  canvas.strokes.push(...bars);
+  writeFileSync(CANVAS_FILE, JSON.stringify(canvas, null, 2) + '\n');
+  await page.waitForTimeout(1000);
+  await previewFrame(page).evaluate(() => {
+    window.__writes = 0;
+    window.__STORYBOOK_ADDONS_CHANNEL__.on('addon-colab/canvas-changed', () => (window.__writes += 1));
+  });
+  await previewFrame(page).locator('[data-colab-draw-tool="eraser"]').click();
+  const y = iframe.y + iframe.height / 2 + 120;
+  await page.mouse.move(iframe.x + iframe.width / 2 - 80 * view.zoom, y);
+  await page.mouse.down();
+  await page.mouse.move(iframe.x + iframe.width / 2 + 80 * view.zoom, y, { steps: 16 });
+  await page.mouse.up();
+  check(
+    'a swipe across three strokes erases all three',
+    await waitForFile((c) => !c.strokes.some((s) => s.id.startsWith('stroke_bar'))),
+  );
+  await page.waitForTimeout(500);
+  const writes = await previewFrame(page).evaluate(() => window.__writes);
+  check('the swipe is one write', writes === 1, { writes });
+  check(
+    'the other strokes stay',
+    read()
+      .strokes.map((s) => s.id)
+      .join() === before.join(),
+    read().strokes.map((s) => s.id),
+  );
+  await previewFrame(page).locator('[data-colab-board]').focus();
+  await page.keyboard.press(`${MOD}+z`);
+  check(
+    '⌘Z puts the three back',
+    await waitForFile((c) => bars.every((bar) => c.strokes.some((s) => s.id === bar.id))),
+  );
+  await previewFrame(page).locator('[data-colab-draw-tool="pen"]').click();
 }
 
 // 10. Escape leaves draw mode; the story is interactive again.

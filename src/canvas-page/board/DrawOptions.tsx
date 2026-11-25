@@ -95,6 +95,12 @@ export interface DrawOptionsProps {
 
 export function DrawOptions({ settings, onChange, strokeCount, onClear, container }: DrawOptionsProps) {
   const [confirming, setConfirming] = useState(false);
+  // The count the dialog states: follows the canvas while open, then stays put, so the dialog does
+  // not read "All 0 strokes" while it fades out after Clear.
+  const [shownCount, setShownCount] = useState(strokeCount);
+  useEffect(() => {
+    if (confirming) setShownCount(strokeCount);
+  }, [confirming, strokeCount]);
   const cancelRef = useRef<HTMLButtonElement>(null);
   const isPen = settings.tool === 'pen';
 
@@ -170,7 +176,10 @@ export function DrawOptions({ settings, onChange, strokeCount, onClear, containe
           tooltip={strokeCount > 0 ? 'Clear drawing' : 'Nothing drawn yet'}
           data-colab-draw-clear=""
           disabled={strokeCount === 0}
-          onClick={() => setConfirming(true)}
+          onClick={() => {
+            setShownCount(strokeCount);
+            setConfirming(true);
+          }}
         >
           <TrashIcon />
         </Button>
@@ -186,7 +195,7 @@ export function DrawOptions({ settings, onChange, strokeCount, onClear, containe
           <Modal.Header>
             <Modal.Title>Clear the drawing?</Modal.Title>
             <Modal.Description>
-              {strokeCount === 1 ? 'The 1 stroke' : `All ${strokeCount} strokes`} on this canvas will be removed for
+              {shownCount === 1 ? 'The 1 stroke' : `All ${shownCount} strokes`} on this canvas will be removed for
               everyone. You can undo this (⌘Z or Ctrl+Z).
             </Modal.Description>
           </Modal.Header>

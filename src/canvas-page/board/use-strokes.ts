@@ -23,13 +23,11 @@ import {
 } from '../../board/stroke-edits';
 import type { UndoEntry, UndoStack } from '../../board/undo-stack';
 import type { CanvasFile, Stroke } from '../../canvas-file';
-import { CanvasRequestError, type ChannelLike, type StrokeInput, requestCanvas } from '../../channel';
+import { type ChannelLike, type StrokeInput, requestCanvas } from '../../channel';
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-
-const isNotFound = (error: unknown) => error instanceof CanvasRequestError && error.code === 'NOT_FOUND';
 
 export interface StrokesApi {
   /** What to draw: the file's strokes plus local changes, in drawing order. */
@@ -71,25 +69,20 @@ export function useStrokes(
 
   const canvasId = () => canvasRef.current.id;
 
-  /** Removes saved strokes by id. A stroke already gone (erased elsewhere) counts as removed. */
+  /** Removes saved strokes by id, in one write. A stroke already gone (erased elsewhere) counts as removed. */
   const removeIds = useCallback(
     async (ids: readonly string[]) => {
       if (ids.length === 0) return true;
       setEdits((current) => withRemoved(current, ids));
-      const results = await Promise.all(
-        ids.map((strokeId) =>
-          requestCanvas(channel, 'removeStroke', { canvasId: canvasId(), strokeId }).then(
-            () => true,
-            (error: unknown) => {
-              if (isNotFound(error)) return true;
-              onErrorRef.current(`Couldn't erase the stroke: ${describe(error)}`);
-              return false;
-            },
-          ),
-        ),
+      const ok = await requestCanvas(channel, 'removeStrokes', { canvasId: canvasId(), strokeIds: [...ids] }).then(
+        () => true,
+        (error: unknown) => {
+          onErrorRef.current(`Couldn't erase ${ids.length === 1 ? 'the stroke' : 'the strokes'}: ${describe(error)}`);
+          return false;
+        },
       );
-      ids.forEach((id, i) => setEdits((current) => withRemoveDone(current, [id], results[i]!)));
-      return results.every(Boolean);
+      setEdits((current) => withRemoveDone(current, ids, ok));
+      return ok;
     },
     [channel, setEdits],
   );
