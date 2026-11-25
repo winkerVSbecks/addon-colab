@@ -219,6 +219,57 @@ describe('frames', () => {
     expect(canvas.comments).toHaveLength(1);
   });
 
+  it('restores a removed frame with the same id, position, size and place in the order', async () => {
+    const add = (storyId: string, x: number) =>
+      store.addFrame({ canvasId: 'board', frame: { storyId, x, y: 5, width: 100, height: 50 } });
+    const a = (await add('s--a', 0)).frame;
+    const b = (await add('s--b', 200)).frame;
+    const c = (await add('s--c', 400)).frame;
+    await store.removeFrame({ canvasId: 'board', frameId: b.id });
+
+    const restored = await store.restoreFrame({ canvasId: 'board', frame: b, index: 1 });
+    expect(restored.frame).toEqual(b);
+    expect(restored.canvas.frames).toEqual([a, b, c]);
+    expect((await store.get({ id: 'board' })).frames).toEqual([a, b, c]);
+
+    // Without an index (or with one past the end) the frame goes on top.
+    await store.removeFrame({ canvasId: 'board', frameId: a.id });
+    expect((await store.restoreFrame({ canvasId: 'board', frame: a })).canvas.frames).toEqual([b, c, a]);
+    await store.removeFrame({ canvasId: 'board', frameId: b.id });
+    expect((await store.restoreFrame({ canvasId: 'board', frame: b, index: 99 })).canvas.frames).toEqual([c, a, b]);
+  });
+
+  it('does not restore a frame that is on the canvas, or an invalid one', async () => {
+    const { frame } = await store.addFrame({ canvasId: 'board', frame: { storyId: 's--a', x: 0, y: 0, width: 10 } });
+    await expectStoreError(store.restoreFrame({ canvasId: 'board', frame }), 'ALREADY_EXISTS');
+    await expectStoreError(
+      store.restoreFrame({ canvasId: 'board', frame: { ...frame, id: 'frame-new', width: 0 } }),
+      'INVALID_INPUT',
+    );
+    await expectStoreError(
+      store.restoreFrame({ canvasId: 'board', frame: { ...frame, id: 'frame-new' }, index: -1 }),
+      'INVALID_INPUT',
+    );
+    expect((await store.get({ id: 'board' })).frames).toEqual([frame]);
+  });
+
+  it('raises a frame to the end of the stacking order, and writes nothing when it is already there', async () => {
+    const add = (storyId: string) => store.addFrame({ canvasId: 'board', frame: { storyId, x: 0, y: 0, width: 100 } });
+    const a = (await add('s--a')).frame;
+    const b = (await add('s--b')).frame;
+    const c = (await add('s--c')).frame;
+
+    const raised = await store.raiseFrame({ canvasId: 'board', frameId: a.id });
+    expect(raised.frame).toEqual(a);
+    expect(raised.canvas.frames).toEqual([b, c, a]);
+
+    const again = await store.raiseFrame({ canvasId: 'board', frameId: a.id });
+    expect(again.canvas.updatedAt).toBe(raised.canvas.updatedAt);
+    expect(again.canvas.frames).toEqual([b, c, a]);
+
+    await expectStoreError(store.raiseFrame({ canvasId: 'board', frameId: 'frame-x' }), 'NOT_FOUND');
+  });
+
   it('rejects invalid frames and unknown ids', async () => {
     await expectStoreError(
       store.addFrame({ canvasId: 'board', frame: { storyId: 's', x: 0, y: 0, width: -1 } }),

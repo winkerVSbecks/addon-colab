@@ -471,6 +471,33 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
       return { canvas };
     },
 
+    async restoreFrame({ canvasId, frame, index }) {
+      const input = parseInput(frameSchema, frame, 'frame');
+      const at = index === undefined ? undefined : parseInput(z.number().int().min(0), index, 'index');
+      const { canvas } = await mutate(canvasId, (current) => {
+        if (current.frames.some((f) => f.id === input.id)) {
+          throw new CanvasStoreError('ALREADY_EXISTS', `Frame "${input.id}" is already on canvas "${canvasId}"`);
+        }
+        const frames = current.frames.toSpliced(Math.min(at ?? current.frames.length, current.frames.length), 0, input);
+        return { canvas: { ...current, frames }, result: null };
+      });
+      return { canvas, frame: input };
+    },
+
+    async raiseFrame({ canvasId, frameId }) {
+      assertCanvasId(canvasId);
+      // Already on top: answer without a write, so selecting the top frame never touches the file.
+      const existing = (await load(canvasId)).canvas;
+      const top = existing.frames.at(-1);
+      if (top && top.id === frameId) return { canvas: existing, frame: top };
+      const { canvas, result } = await mutate(canvasId, (current) => {
+        const index = findIndex(current.frames, frameId, 'frame', canvasId);
+        const raised = current.frames[index]!;
+        return { canvas: { ...current, frames: [...current.frames.toSpliced(index, 1), raised] }, result: raised };
+      });
+      return { canvas, frame: result };
+    },
+
     async addComment({ canvasId, comment }) {
       const input = parseInput(commentInputSchema, comment, 'comment');
       const { canvas, result } = await mutate(canvasId, (current) => {

@@ -85,6 +85,19 @@ export interface CanvasOperations {
   };
   /** Comments anchored to the frame are kept; their anchors still name the story. */
   removeFrame: { args: { canvasId: string; frameId: string }; result: { canvas: CanvasFile } };
+  /**
+   * Puts a removed frame back with the same id (undo of `removeFrame`), at `index` in the stacking
+   * order (clamped; the top when absent). Fails with `ALREADY_EXISTS` when the id is on the canvas.
+   */
+  restoreFrame: {
+    args: { canvasId: string; frame: Frame; index?: number };
+    result: { canvas: CanvasFile; frame: Frame };
+  };
+  /**
+   * Brings a frame to the front: moves it to the end of `frames`, whose order is the stacking order
+   * (last = on top). Writes nothing when it is already there.
+   */
+  raiseFrame: { args: { canvasId: string; frameId: string }; result: { canvas: CanvasFile; frame: Frame } };
   addComment: { args: { canvasId: string; comment: CommentInput }; result: { canvas: CanvasFile; comment: Comment } };
   addReply: {
     args: { canvasId: string; commentId: string; reply: ReplyInput };
@@ -110,6 +123,8 @@ export const CANVAS_OPERATIONS = [
   'addFrame',
   'updateFrame',
   'removeFrame',
+  'restoreFrame',
+  'raiseFrame',
   'addComment',
   'addReply',
   'resolveComment',
