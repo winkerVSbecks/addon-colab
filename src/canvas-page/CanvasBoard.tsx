@@ -21,6 +21,7 @@ import type { CanvasFile } from '../canvas-file';
 import { CanvasRequestError, type ChannelLike, requestCanvas } from '../channel';
 import { BoardNotice, type BoardNoticeContent } from './board/BoardNotice';
 import { BoardToolbar } from './board/BoardToolbar';
+import { CommentLayer } from './board/CommentLayer';
 import { FrameBody } from './board/FrameBody';
 import { FrameChrome, type GestureHandlers, type ResizeEdge } from './board/FrameChrome';
 import { type ModeHandlers, ModeLayer } from './board/ModeLayer';
@@ -32,6 +33,7 @@ import { useFrameEdits } from './board/use-frame-edits';
 import { usePanZoom } from './board/use-pan-zoom';
 import { useStoryDrop } from './board/use-story-drop';
 import { useUndoStack } from './board/use-undo-stack';
+import { useComments } from './board/use-comments';
 // Drawing (task 8): strokes over the frames, and draw mode's tool.
 import { DEFAULT_DRAW_SETTINGS, DRAW_COLORS, DRAW_WIDTHS, DrawOptions } from './board/DrawOptions';
 import { StrokeLayer, type StrokeLayerHandle } from './board/StrokeLayer';
@@ -190,6 +192,40 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     colors: { dot: theme.appBorderColor, frameBorder: theme.appBorderColor },
   };
   useLayoutEffect(() => paint());
+
+  // Comments (task 7): pins, threads and the list; comment mode's hover and press.
+  const storyName = useCallback(
+    (storyId: string) => {
+      const frame = frames.find((f) => f.storyId === storyId);
+      return (frame && titles.get(frame.id)?.short) ?? storyTitleFromId(storyId).short;
+    },
+    [frames, titles],
+  );
+  const setView = board.setView;
+  const centerOn = useCallback(
+    (point: { x: number; y: number }) =>
+      setView((view) => ({
+        ...view,
+        x: size.width / 2 - point.x * view.zoom,
+        y: size.height / 2 - point.y * view.zoom,
+      })),
+    [setView, size],
+  );
+  const comments = useComments({
+    canvas,
+    frames,
+    view: board.view,
+    root: rootRef,
+    preview,
+    channel,
+    undoStack,
+    showUndoable,
+    showError,
+    storyName,
+    centerOn,
+    active: mode === 'comment',
+  });
+  modeHandlers.comment = comments.handlers;
 
   // A story file was hot-reloaded: Storybook re-renders the canvas entry as "unchanged", so each
   // frame reloads its story and re-renders it if its implementation changed.
@@ -482,6 +518,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
           );
         })}
       </ChromeLayer>
+      <CommentLayer state={comments.layer} board={size} />
       <ModeLayer
         mode={mode}
         handlers={modeHandlers[mode]}
@@ -510,6 +547,9 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         mode={mode}
         modes={keyState.modes}
         onModeChange={changeMode}
+        commentCount={comments.openCount}
+        commentsOpen={comments.layer.listOpen}
+        onToggleComments={comments.layer.toggleList}
       />
     </Root>
   );

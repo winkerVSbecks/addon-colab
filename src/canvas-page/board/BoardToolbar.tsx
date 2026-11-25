@@ -15,7 +15,15 @@
 import React from 'react';
 
 import { Button, Separator, ToggleButton, Toolbar } from 'storybook/internal/components';
-import { CommentIcon, MarkupIcon, PointerDefaultIcon, ZoomIcon, ZoomOutIcon, ZoomResetIcon } from '@storybook/icons';
+import {
+  CommentIcon,
+  CommentsIcon,
+  MarkupIcon,
+  PointerDefaultIcon,
+  ZoomIcon,
+  ZoomOutIcon,
+  ZoomResetIcon,
+} from '@storybook/icons';
 import { styled } from 'storybook/theming/emotion';
 
 import { type BoardMode, MODE_LABELS, MODE_SHORTCUTS } from '../../board/modes';
@@ -39,6 +47,11 @@ export interface BoardToolbarProps {
   /** The modes the board offers, in switcher order (the switcher shows with two or more). */
   modes?: readonly BoardMode[];
   onModeChange?: (mode: BoardMode) => void;
+  /** Open comments on the canvas (shown on the comment list button). */
+  commentCount?: number;
+  commentsOpen?: boolean;
+  /** Shows or hides the comment list; no button without it. */
+  onToggleComments?: () => void;
 }
 
 const Floating = styled.div(({ theme }) => ({
@@ -52,6 +65,8 @@ const Floating = styled.div(({ theme }) => ({
   overflow: 'hidden',
   '& > *': { border: 'none' },
 }));
+
+const Count = styled.span({ fontVariantNumeric: 'tabular-nums', marginLeft: 2 });
 
 const Percent = styled(Button)({
   minWidth: 52,
@@ -69,6 +84,9 @@ export function BoardToolbar({
   mode = 'select',
   modes = [],
   onModeChange,
+  commentCount = 0,
+  commentsOpen = false,
+  onToggleComments,
 }: BoardToolbarProps) {
   const percent = `${Math.round(zoom * 100)}%`;
   return (
@@ -90,6 +108,23 @@ export function BoardToolbar({
                 {MODE_ICONS[option]}
               </ToggleButton>
             ))}
+            <Separator />
+          </>
+        )}
+        {onToggleComments && (
+          <>
+            <ToggleButton
+              variant="ghost"
+              padding="small"
+              pressed={commentsOpen}
+              ariaLabel={`Comments (${commentCount} open)`}
+              tooltip={commentsOpen ? 'Hide comments' : 'Show comments'}
+              data-colab-comments-toggle=""
+              onClick={onToggleComments}
+            >
+              <CommentsIcon />
+              {commentCount > 0 && <Count>{commentCount}</Count>}
+            </ToggleButton>
             <Separator />
           </>
         )}

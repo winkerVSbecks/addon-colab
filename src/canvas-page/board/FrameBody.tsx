@@ -166,7 +166,12 @@ function FrameBodyImpl({
       data-story-id={storyId}
       style={{ width, minHeight: height ?? MIN_FRAME_HEIGHT }}
     >
-      <StoryRoot ref={storyRef} style={status.kind === 'missing' ? { display: 'none' } : LAYOUT_STYLES[layout]} />
+      <StoryRoot
+        ref={storyRef}
+        // Comment selectors are relative to this element (src/board/element-target.ts).
+        data-colab-story-root={storyId}
+        style={status.kind === 'missing' ? { display: 'none' } : LAYOUT_STYLES[layout]}
+      />
       {status.kind === 'missing' && (
         <Missing data-colab-frame-missing="">
           <strong>This story no longer exists</strong>
