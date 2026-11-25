@@ -120,7 +120,18 @@ export function CommentList({ state }: { state: CommentLayerState }) {
   const placements = new Map(state.pins.map((pin) => [pin.comment.id, pin.placement.state]));
 
   return (
-    <Panel aria-label="Comments" data-colab-comment-list="" onPointerDown={(event) => event.stopPropagation()}>
+    <Panel
+      aria-label="Comments"
+      data-colab-comment-list=""
+      onPointerDown={(event) => event.stopPropagation()}
+      onKeyDown={(event) => {
+        // Escape closes the open thread from the list too.
+        if (event.key === 'Escape' && state.openId && !event.defaultPrevented) {
+          event.preventDefault();
+          state.setOpenId(null);
+        }
+      }}
+    >
       <Header>
         <Title>Comments</Title>
         <ToggleButton

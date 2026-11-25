@@ -157,6 +157,7 @@ const CardPosition = styled.div({
 const Card = styled.div(({ theme }) => ({
   ...box,
   ...hardText(theme),
+  '&:focus:not(:focus-visible)': { outline: 'none' },
   display: 'flex',
   flexDirection: 'column',
   gap: 10,
@@ -317,7 +318,11 @@ function ThreadCard({ pin, comment, state }: { pin?: ShownPin; comment: Comment;
   const detached = pin?.placement.state === 'detached';
   const orphan = !pin || pin.placement.state === 'orphan';
   return (
-    <Card data-colab-thread={comment.id}>
+    <Card
+      data-colab-thread={comment.id}
+      tabIndex={-1}
+      aria-label={`Comment by ${authorLabel(comment.author).toLowerCase()}`}
+    >
       <Row>
         <Author data-author={comment.author}>
           <AuthorIcon author={comment.author} />
@@ -411,12 +416,25 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
   const openPin = open ? pins.find((p) => p.comment.id === open.id) : undefined;
   const pinRefs = useRef(new Map<string, HTMLButtonElement>());
 
-  // Closing a thread returns focus to its pin.
+  // Opening a thread moves focus into it; closing it returns focus to where it was opened from (a
+  // list row, or the pin), else to the pin.
   const lastOpen = useRef<string | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const previous = lastOpen.current;
     lastOpen.current = openId;
-    if (previous && !openId) pinRefs.current.get(previous)?.focus({ preventScroll: true });
+    if (openId && openId !== previous) {
+      const doc = layerRef.current?.ownerDocument;
+      const active = doc?.activeElement;
+      if (!previous)
+        opener.current = active instanceof HTMLElement && layerRef.current?.contains(active) ? active : null;
+      doc?.querySelector<HTMLElement>(`[data-colab-thread="${CSS.escape(openId)}"]`)?.focus({ preventScroll: true });
+    } else if (previous && !openId) {
+      const back = opener.current?.isConnected ? opener.current : pinRefs.current.get(previous);
+      opener.current = null;
+      back?.focus({ preventScroll: true });
+    }
   }, [openId]);
 
   const close = () => state.setOpenId(null);
@@ -425,7 +443,7 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
   useEffect(() => installStoryCssReset(), []);
 
   return (
-    <Layer data-colab-comments="" {...{ [STORY_CSS_RESET_ATTRIBUTE]: '' }}>
+    <Layer ref={layerRef} data-colab-comments="" {...{ [STORY_CSS_RESET_ATTRIBUTE]: '' }}>
       <PinLayer data-colab-pins="">
         {pins.map((pin) => {
           if (!pin.screen) return null;
