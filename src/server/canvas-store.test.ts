@@ -479,6 +479,16 @@ describe('change events', () => {
       expect(await rec.next()).toEqual({ type: 'deleted', id: 'board', source: 'external' });
     });
 
+    it('broadcasts an external delete of a canvas created a while ago', async () => {
+      // On macOS, fs.watch never reported deleting a file the store had created as a hard link;
+      // the immediate delete above only passed because the create's own events were still arriving.
+      await store.create({ name: 'Board' });
+      await delay(300);
+      const rec = recorder(store);
+      await unlink(fileOf('board'));
+      expect(await rec.next()).toEqual({ type: 'deleted', id: 'board', source: 'external' });
+    });
+
     it('broadcasts a corrupt external edit as invalid, then the fix', async () => {
       const canvas = await store.create({ name: 'Board' });
       const rec = recorder(store);

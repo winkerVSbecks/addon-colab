@@ -215,6 +215,9 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
       if (exclusive) {
         // link() fails if the target exists, so a concurrent create is never overwritten.
         await link(tmp, pathOf(id));
+        // Then give the file its own inode: on macOS, fs.watch (here and in Storybook's index
+        // watcher) never reports deleting a file that was created as a hard link.
+        await writeAtomic(id, text);
       } else {
         await rename(tmp, pathOf(id));
       }
