@@ -115,9 +115,10 @@ export function CanvasTool() {
         }
         onConfirm={async () => {
           if (!deleting) return;
-          // Leave the page first: Storybook shows an error screen when the open entry disappears.
-          await leaveCanvas(api, deleting.id);
+          // Delete first, so a failed delete keeps the page and shows the error in the dialog. Then
+          // leave the page before Storybook's index drops the entry (that takes a moment longer).
           await requestCanvas(channel, 'delete', { id: deleting.id });
+          await leaveCanvas(api, deleting.id);
         }}
       />
     </>

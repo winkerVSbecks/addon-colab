@@ -8,6 +8,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, Form, Modal } from 'storybook/internal/components';
 import { styled } from 'storybook/theming/emotion';
 
+import { deleteContents } from './wording';
+
 const NameInput = styled(Form.Input)(({ theme }) => ({
   '::placeholder': { color: theme.color.mediumdark },
 }));
@@ -143,15 +145,18 @@ export interface CanvasDeleteDialogProps {
   onConfirm: () => Promise<unknown>;
 }
 
-function plural(count: number, one: string, many = `${one}s`) {
-  return `${count} ${count === 1 ? one : many}`;
-}
-
 export function CanvasDeleteDialog({ open, onOpenChange, name, fileId, counts, onConfirm }: CanvasDeleteDialogProps) {
   const { pending, error, run } = useSubmit(open);
-  const contents = counts
-    ? ` with its ${plural(counts.frames, 'story', 'stories')} and ${plural(counts.comments, 'comment')}`
-    : '';
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const contents = deleteContents(counts);
+
+  // The modal focuses its first button (Delete). Start on Cancel, so Enter does not delete by accident.
+  useEffect(() => {
+    if (!open) return;
+    const timer = setTimeout(() => cancelRef.current?.focus(), 0);
+    return () => clearTimeout(timer);
+  }, [open]);
+
   return (
     <Modal ariaLabel="Delete canvas" width={380} open={open} onOpenChange={onOpenChange}>
       <Modal.Content>
@@ -179,7 +184,7 @@ export function CanvasDeleteDialog({ open, onOpenChange, name, fileId, counts, o
             Delete canvas
           </DeleteButton>
           <Modal.Close asChild>
-            <Button ariaLabel={false} size="medium" disabled={pending}>
+            <Button ref={cancelRef} ariaLabel={false} size="medium" disabled={pending}>
               Cancel
             </Button>
           </Modal.Close>
