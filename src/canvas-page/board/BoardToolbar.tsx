@@ -18,7 +18,7 @@ import { Button, Separator, ToggleButton, Toolbar } from 'storybook/internal/com
 import {
   CommentIcon,
   CommentsIcon,
-  MarkupIcon,
+  EditIcon,
   PointerDefaultIcon,
   ZoomIcon,
   ZoomOutIcon,
@@ -33,7 +33,7 @@ import { storyCssShield } from './comment-ui';
 const MODE_ICONS: Record<BoardMode, React.ReactNode> = {
   select: <PointerDefaultIcon />,
   comment: <CommentIcon />,
-  draw: <MarkupIcon />,
+  draw: <EditIcon />,
 };
 
 export interface BoardToolbarProps {
