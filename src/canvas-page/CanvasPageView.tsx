@@ -106,7 +106,7 @@ export function CanvasPageView({ state, renderBoard }: CanvasPageViewProps) {
             <Overlay data-colab-canvas-empty="">
               <EmptyTabContent
                 title={`${state.canvas.name} is empty`}
-                description="Drag stories from the sidebar onto the canvas. Each one renders live, and you can move and resize it."
+                description="Drag stories from the sidebar onto the canvas. Each one renders live: move and resize it, or press C and click any element in it to leave a comment."
               />
             </Overlay>
           )}

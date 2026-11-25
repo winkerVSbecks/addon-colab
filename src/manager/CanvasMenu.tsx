@@ -86,7 +86,7 @@ export function CanvasMenu({ listing, currentFileId, onOpen, onNew, onRename, on
         </Muted>
       )}
       {listing.status === 'ready' && canvases.length + invalid.length === 0 && (
-        <Muted>No canvases yet. Create one to arrange live stories side by side.</Muted>
+        <Muted>No canvases yet. Create one to arrange live stories side by side and comment on them.</Muted>
       )}
       {canvases.length + invalid.length > 0 && (
         <ScrollList aria-label="Canvases">
