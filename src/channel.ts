@@ -6,19 +6,20 @@
  * It follows the request/response pattern Storybook's own server channel features use
  * (`SAVE_STORY_REQUEST`/`SAVE_STORY_RESPONSE`, `experimental_requestResponse`): the browser emits
  * `CANVAS_REQUEST` with `{ id, payload }`, the server answers on `CANVAS_RESPONSE` with
- * `{ id, success, error, payload }`, and every client filters responses by `id`. The server also
- * broadcasts `CANVAS_CHANGED` whenever a canvas changes, whoever changed it.
+ * `{ id, payload }`, and every client filters responses by `id`. The server also broadcasts
+ * `CANVAS_CHANGED` whenever a canvas changes, whoever changed it. Payloads are JSON strings so the
+ * transport cannot change them; use `requestCanvas` and `onCanvasChanged` rather than raw events.
  */
 import type { Channel } from 'storybook/internal/channels';
 
 import type { CanvasFile, Comment, Frame, Reply, Stroke } from './canvas-file';
 import { ADDON_ID } from './constants';
 
-/** Browser → server. Payload: `CanvasRequest`. */
+/** Browser → server. Payload: `CanvasRequest`. Send with `requestCanvas`. */
 export const CANVAS_REQUEST = `${ADDON_ID}/canvas-request`;
 /** Server → browser. Payload: `CanvasResponse`. */
 export const CANVAS_RESPONSE = `${ADDON_ID}/canvas-response`;
-/** Server → browser, broadcast on every change. Payload: `CanvasChangeEvent`. */
+/** Server → browser, broadcast on every change. Payload: an encoded `CanvasChangeEvent`; subscribe with `onCanvasChanged`. */
 export const CANVAS_CHANGED = `${ADDON_ID}/canvas-changed`;
 
 /** One row of the canvas list. */
@@ -122,10 +123,11 @@ export const CANVAS_OPERATIONS = [
  * Why an operation failed.
  * - `NOT_FOUND`: no such canvas, frame, comment or stroke.
  * - `ALREADY_EXISTS`: `create` with an explicit id that is taken.
- * - `INVALID_INPUT`: the arguments would produce an invalid canvas; `errors` says why.
+ * - `INVALID_INPUT`: the arguments are malformed or would produce an invalid canvas; `errors` says why.
  * - `INVALID_FILE`: the canvas file on disk does not validate; it is left untouched.
  * - `CONFLICT`: the file kept changing under the store; nothing was written.
- * - `UNKNOWN_OPERATION`, `INTERNAL`: anything else.
+ * - `UNKNOWN_OPERATION`: the channel received an operation name that is not in `CANVAS_OPERATIONS`.
+ * - `INTERNAL`: an unexpected server error, or a response the helper could not decode.
  */
 export type CanvasErrorCode =
   | 'NOT_FOUND'
@@ -141,16 +143,51 @@ export interface CanvasErrorPayload {
   errors?: string[];
 }
 
-/** Same shape as Storybook's `RequestData` (`storybook/internal/core-events`). */
-export interface CanvasRequest<Op extends CanvasOperation = CanvasOperation> {
+/**
+ * What travels on the channel. Everything except the request `id` is a JSON string (see
+ * `encodeCanvasMessage`), so the transport's serialiser cannot alter it: Storybook's WebSocket
+ * transport (telejson) turns any string that looks like an ISO timestamp into a `Date`, in both
+ * directions, and limits nesting depth. A JSON string is opaque to it.
+ *
+ * Browser → server on `CANVAS_REQUEST`. `payload` encodes `CanvasRequestBody`.
+ */
+export interface CanvasRequest {
   id: string;
-  payload: { op: Op; args: CanvasOperationArgs<Op> };
+  payload: string;
 }
 
-/** Same shape as Storybook's `ResponseData` (`storybook/internal/core-events`). */
-export type CanvasResponse<Op extends CanvasOperation = CanvasOperation> =
-  | { id: string; success: true; error: null; payload: CanvasOperationResult<Op> }
-  | { id: string; success: false; error: string; payload: CanvasErrorPayload };
+export interface CanvasRequestBody<Op extends CanvasOperation = CanvasOperation> {
+  op: Op;
+  args: CanvasOperationArgs<Op>;
+}
+
+/** Server → browser on `CANVAS_RESPONSE`. `payload` encodes `CanvasResponseBody`. */
+export interface CanvasResponse {
+  id: string;
+  payload: string;
+}
+
+export type CanvasResponseBody<Op extends CanvasOperation = CanvasOperation> =
+  | { success: true; result: CanvasOperationResult<Op> }
+  | { success: false; error: string; code: CanvasErrorCode; errors?: string[] };
+
+/** Server → browser on `CANVAS_CHANGED`: an encoded `CanvasChangeEvent`. Decode with `onCanvasChanged`. */
+export type CanvasChangedMessage = string;
+
+/** Encodes a channel payload. JSON keeps strings as strings and has no depth limit. */
+export function encodeCanvasMessage(value: unknown): string {
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+/** Decodes a channel payload; `undefined` if it is not an encoded payload. */
+export function decodeCanvasMessage<T>(data: unknown): T | undefined {
+  if (typeof data !== 'string') return undefined;
+  try {
+    return JSON.parse(data) as T;
+  } catch {
+    return undefined;
+  }
+}
 
 /** The part of a Storybook channel this module needs; manager, preview and server channels all fit. */
 export type ChannelLike = Pick<Channel, 'emit' | 'on' | 'off'>;
@@ -181,19 +218,23 @@ export function requestCanvas<Op extends CanvasOperation>(
     : [args: CanvasOperationArgs<Op>, options?: { timeout?: number }]
 ): Promise<CanvasOperationResult<Op>> {
   const timeout = options?.timeout ?? 5000;
-  const request: CanvasRequest<Op> = {
+  const body: CanvasRequestBody<Op> = { op, args: args as CanvasOperationArgs<Op> };
+  const request: CanvasRequest = {
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`,
-    payload: { op, args: args as CanvasOperationArgs<Op> },
+    payload: encodeCanvasMessage(body),
   };
   return new Promise((resolve, reject) => {
-    const onResponse = (response: CanvasResponse<Op>) => {
+    const onResponse = (response: CanvasResponse) => {
       if (response?.id !== request.id) return;
       clearTimeout(timer);
       channel.off(CANVAS_RESPONSE, onResponse);
-      if (response.success) {
-        resolve(response.payload);
+      const decoded = decodeCanvasMessage<CanvasResponseBody<Op>>(response.payload);
+      if (!decoded || typeof decoded !== 'object') {
+        reject(new CanvasRequestError(`Unreadable response from the canvas server (${op})`, 'INTERNAL'));
+      } else if (decoded.success) {
+        resolve(decoded.result);
       } else {
-        reject(new CanvasRequestError(response.error, response.payload.code, response.payload.errors));
+        reject(new CanvasRequestError(decoded.error, decoded.code, decoded.errors));
       }
     };
     const timer = setTimeout(() => {
@@ -203,4 +244,17 @@ export function requestCanvas<Op extends CanvasOperation>(
     channel.on(CANVAS_RESPONSE, onResponse);
     channel.emit(CANVAS_REQUEST, request);
   });
+}
+
+/**
+ * Calls `listener` with every `CanvasChangeEvent` the server broadcasts, decoded. Returns a function
+ * that unsubscribes. Use this instead of listening to `CANVAS_CHANGED` directly.
+ */
+export function onCanvasChanged(channel: ChannelLike, listener: (event: CanvasChangeEvent) => void): () => void {
+  const handler = (message: CanvasChangedMessage) => {
+    const event = decodeCanvasMessage<CanvasChangeEvent>(message);
+    if (event && typeof event === 'object') listener(event);
+  };
+  channel.on(CANVAS_CHANGED, handler);
+  return () => channel.off(CANVAS_CHANGED, handler);
 }

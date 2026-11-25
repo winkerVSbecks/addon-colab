@@ -388,10 +388,10 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
 
     async create({ name, id }) {
       const cleanName = parseInput(z.string().trim().min(1).max(200), name, 'canvas name');
-      if (id !== undefined && !isCanvasId(id)) {
+      if (id !== undefined && (typeof id !== 'string' || !isCanvasId(id))) {
         throw new CanvasStoreError(
           'INVALID_INPUT',
-          `Invalid canvas id "${id}": use a lowercase slug such as "design-review"`,
+          `Invalid canvas id ${JSON.stringify(id) ?? String(id)}: use a lowercase slug such as "design-review"`,
         );
       }
       const base = id ?? (canvasIdFromName(cleanName) || 'canvas');

@@ -8,12 +8,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { serializeCanvasFile } from '../canvas-file';
 import {
-  CANVAS_CHANGED,
   CANVAS_REQUEST,
   CANVAS_RESPONSE,
   type CanvasChangeEvent,
   CanvasRequestError,
   type CanvasResponse,
+  type CanvasResponseBody,
+  decodeCanvasMessage,
+  encodeCanvasMessage,
+  onCanvasChanged,
   requestCanvas,
 } from '../channel';
 import { canvasDirFor, experimental_serverChannel } from '../preset';
@@ -42,7 +45,7 @@ afterEach(async () => {
 
 function changes() {
   const events: CanvasChangeEvent[] = [];
-  channel.on(CANVAS_CHANGED, (event: CanvasChangeEvent) => events.push(event));
+  onCanvasChanged(channel, (event) => events.push(event));
   return events;
 }
 
@@ -70,13 +73,15 @@ describe('requestCanvas over the channel', () => {
   });
 
   it('answers unknown operations with UNKNOWN_OPERATION', async () => {
-    const responses: CanvasResponse[] = [];
-    channel.on(CANVAS_RESPONSE, (response: CanvasResponse) => responses.push(response));
-    channel.emit(CANVAS_REQUEST, { id: 'r1', payload: { op: 'dropTables', args: {} } });
-    channel.emit(CANVAS_REQUEST, { id: 'r2', payload: { op: 'subscribe', args: {} } });
+    const responses: [string, CanvasResponseBody][] = [];
+    channel.on(CANVAS_RESPONSE, (response: CanvasResponse) =>
+      responses.push([response.id, decodeCanvasMessage<CanvasResponseBody>(response.payload)!]),
+    );
+    channel.emit(CANVAS_REQUEST, { id: 'r1', payload: encodeCanvasMessage({ op: 'dropTables', args: {} }) });
+    channel.emit(CANVAS_REQUEST, { id: 'r2', payload: encodeCanvasMessage({ op: 'subscribe', args: {} }) });
     channel.emit(CANVAS_REQUEST, { nonsense: true });
     await new Promise((r) => setTimeout(r, 10));
-    expect(responses.map((r) => [r.id, r.success, !r.success && r.payload.code])).toEqual([
+    expect(responses.map(([id, r]) => [id, r.success, !r.success && r.code])).toEqual([
       ['r1', false, 'UNKNOWN_OPERATION'],
       ['r2', false, 'UNKNOWN_OPERATION'],
     ]);
@@ -115,7 +120,7 @@ describe('change broadcasts', () => {
     await store.watch();
     const canvas = await store.create({ name: 'Board' });
     const events = changes();
-    const received = new Promise((resolve) => channel.on(CANVAS_CHANGED, resolve));
+    const received = new Promise<void>((resolve) => onCanvasChanged(channel, () => resolve()));
     await writeFile(join(dir, 'board.json'), serializeCanvasFile({ ...canvas, name: 'By hand' }));
     await received;
     expect(events).toEqual([
