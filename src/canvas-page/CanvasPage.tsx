@@ -5,10 +5,11 @@
  */
 import React, { useEffect, useState } from 'react';
 
-import { CanvasRequestError, type ChannelLike, onCanvasChanged, requestCanvas } from '../channel';
+import { type ChannelLike, onCanvasChanged, requestCanvas } from '../channel';
 import { type ThemeChoice, StorybookThemeProvider } from '../ui-theme';
 import { CanvasBoard } from './CanvasBoard';
 import { type CanvasPageState, CanvasPageView } from './CanvasPageView';
+import { canvasPageStateFromError, initialCanvasPageState } from './page-state';
 import { supportsHtmlInCanvas } from './support';
 
 export interface CanvasPageProps {
@@ -20,23 +21,16 @@ export interface CanvasPageProps {
   supported?: boolean;
 }
 
-function stateFromError(fileId: string, error: unknown): CanvasPageState {
-  if (error instanceof CanvasRequestError) {
-    if (error.code === 'NOT_FOUND') return { kind: 'missing', fileId };
-    if (error.code === 'INVALID_FILE' || error.code === 'INVALID_INPUT') {
-      return { kind: 'invalid', fileId, errors: error.errors.length ? error.errors : [error.message] };
-    }
-    return { kind: 'error', message: error.message };
-  }
-  return { kind: 'error', message: error instanceof Error ? error.message : String(error) };
-}
-
 export function useCanvasPageState(fileId: string, channel: ChannelLike, supported: boolean): CanvasPageState {
-  const [state, setState] = useState<CanvasPageState>(supported ? { kind: 'loading' } : { kind: 'unsupported' });
+  const [state, setState] = useState<CanvasPageState>(
+    () => initialCanvasPageState(fileId, supported) ?? { kind: 'loading' },
+  );
 
   useEffect(() => {
-    if (!supported) {
-      setState({ kind: 'unsupported' });
+    // Unsupported browsers and bad file names need no answer from the server.
+    const initial = initialCanvasPageState(fileId, supported);
+    if (initial) {
+      setState(initial);
       return;
     }
     let active = true;
@@ -52,7 +46,7 @@ export function useCanvasPageState(fileId: string, channel: ChannelLike, support
     });
     requestCanvas(channel, 'get', { id: fileId }).then(
       (canvas) => active && !changed && setState({ kind: 'ready', canvas }),
-      (error) => active && !changed && setState(stateFromError(fileId, error)),
+      (error) => active && !changed && setState(canvasPageStateFromError(fileId, error)),
     );
     return () => {
       active = false;
