@@ -393,16 +393,6 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
 
   return (
     <Layer data-colab-comments="">
-      {hover && (
-        <Highlight
-          data-colab-hover={hover.kind}
-          data-kind={hover.kind}
-          style={{ left: hover.left, top: hover.top, width: hover.width, height: hover.height }}
-        >
-          <HighlightLabel>{hover.label}</HighlightLabel>
-        </Highlight>
-      )}
-
       {state.listOpen && <CommentList state={state} />}
 
       {pins.map((pin) => {
@@ -439,6 +429,17 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
           </Pin>
         );
       })}
+
+      {/* The hover highlight draws above pins, so its label stays readable. */}
+      {hover && (
+        <Highlight
+          data-colab-hover={hover.kind}
+          data-kind={hover.kind}
+          style={{ left: hover.left, top: hover.top, width: hover.width, height: hover.height }}
+        >
+          <HighlightLabel>{hover.label}</HighlightLabel>
+        </Highlight>
+      )}
 
       {draft && draftScreen && (
         <>
