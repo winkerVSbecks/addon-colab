@@ -6,6 +6,7 @@ import type { Options } from 'storybook/internal/types';
 import type { ChannelLike } from './channel';
 import { registerCanvasChannel } from './server/canvas-channel';
 import { getCanvasStore } from './server/canvas-store';
+import { type DevServerApp, registerColabMcp } from './server/mcp/dev-server';
 
 /** Addon options, set in `.storybook/main` as `{ name: 'storybook-addon-colab', options: { canvasDir } }`. */
 export interface ColabAddonOptions {
@@ -37,4 +38,13 @@ export const experimental_serverChannel = async <C extends ChannelLike>(
   }
   registerCanvasChannel(channel, store);
   return channel;
+};
+
+// MCP endpoint for coding agents (task 4): served by this dev server and backed by the same store.
+export const experimental_devServer = async <A extends DevServerApp>(
+  app: A,
+  options: Options & ColabAddonOptions,
+): Promise<A> => {
+  await registerColabMcp(app, options, { dir: canvasDirFor(options) });
+  return app;
 };
