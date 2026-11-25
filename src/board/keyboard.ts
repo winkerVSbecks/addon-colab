@@ -10,6 +10,8 @@
  * Pure functions over a minimal element shape, so they run in Node tests without a DOM.
  */
 
+import { type BoardMode, modeForKey } from './modes';
+
 /** The parts of a DOM element these rules read. */
 export interface FocusElement {
   tagName: string;
@@ -65,30 +67,62 @@ export interface KeyLike {
   altKey?: boolean;
 }
 
-export type BoardKeyAction = 'deselect' | 'undo' | null;
+/**
+ * - `deselect`: clear the frame selection.
+ * - `undo` / `redo`: the board's undo stack (`src/board/undo-stack.ts`).
+ * - `exit-mode`: back to the `select` mode.
+ * - `mode:<mode>`: switch to that mode (single-key shortcut).
+ */
+export type BoardKeyAction = 'deselect' | 'undo' | 'redo' | 'exit-mode' | `mode:${BoardMode}` | null;
 
 export interface BoardKeyState {
   hasSelection: boolean;
-  /** A removed frame can still be put back (the notice with Undo is showing). */
+  /** The undo stack has something to undo. */
   canUndo?: boolean;
+  /** The undo stack has something to redo. */
+  canRedo?: boolean;
+  /** The current board mode (default `select`). */
+  mode?: BoardMode;
+  /** The modes the board offers (shortcuts for other modes are ignored). Default: none. */
+  modes?: readonly BoardMode[];
+}
+
+/** Places where the board's undo keys act: never in a text field or a story (they have their own). */
+function undoKeysApply(place: FocusPlace): boolean {
+  return place !== 'text' && place !== 'story';
 }
 
 /**
- * What a key pressed anywhere in the preview does to the board (window-level handler). Frame
- * removal is not here: only a frame's title removes its frame (see `titleKeyAction`).
- * ⌘Z / Ctrl+Z undoes a removal unless the key belongs to a text field or a story.
+ * What a key pressed anywhere in the preview does to the board. This is the only board-level key
+ * handler; every board shortcut is decided here. Frame removal is not here: only a frame's title
+ * removes its frame (see `titleKeyAction`).
+ * - ⌘Z / Ctrl+Z undoes, ⇧⌘Z / Ctrl+Shift+Z / Ctrl+Y redoes, unless the key belongs to a text field
+ *   or a story.
+ * - Escape leaves a comment or draw mode (from the board, a title, a control or nowhere), otherwise
+ *   deselects (from the board, a title or nowhere).
+ * - V, C and D switch mode, only with focus on the board itself or nowhere.
  */
 export function boardKeyAction(event: KeyLike, place: FocusPlace, state: BoardKeyState): BoardKeyAction {
   if (event.defaultPrevented) return null;
-  const isUndoKey =
-    event.key.toLowerCase() === 'z' && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey;
-  if (isUndoKey && state.canUndo && place !== 'text' && place !== 'story') return 'undo';
-  if (
-    event.key === 'Escape' &&
-    state.hasSelection &&
-    (place === 'board' || place === 'frame-title' || place === 'none')
-  ) {
-    return 'deselect';
+  const key = event.key.toLowerCase();
+  const command = event.metaKey || event.ctrlKey;
+  if (command && !event.altKey && undoKeysApply(place)) {
+    const isUndo = key === 'z' && !event.shiftKey;
+    const isRedo =
+      (key === 'z' && event.shiftKey) || (key === 'y' && event.ctrlKey && !event.metaKey && !event.shiftKey);
+    if (isUndo && state.canUndo) return 'undo';
+    if (isRedo && state.canRedo) return 'redo';
+    return null;
+  }
+  const mode = state.mode ?? 'select';
+  if (event.key === 'Escape') {
+    if (mode !== 'select' && place !== 'text' && place !== 'story') return 'exit-mode';
+    if (state.hasSelection && (place === 'board' || place === 'frame-title' || place === 'none')) return 'deselect';
+    return null;
+  }
+  if (!command && !event.altKey && !event.shiftKey && (place === 'board' || place === 'none')) {
+    const next = modeForKey(event.key, state.modes ?? []);
+    if (next && next !== mode) return `mode:${next}`;
   }
   return null;
 }

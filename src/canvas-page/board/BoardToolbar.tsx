@@ -6,14 +6,26 @@
  * the manager's zoom tool (`code/core/src/manager/components/preview/tools/zoom.tsx`, which shows the
  * percentage and resets to 100%). Storybook's own toolbar zoom scales the whole preview iframe, so
  * the board has its own controls inside the preview.
+ *
+ * The mode switcher (select / comment / draw, `src/board/modes.ts`) comes first: one `ToggleButton`
+ * per mode, `pressed` for the current one, the way the manager's toolbar toggles work (e.g. the
+ * outline and measure tools, `code/core/src/outline/OutlineSelector.tsx` and `code/core/src/measure/Tool.tsx`). It is shown once the
+ * board offers more than one mode.
  */
 import React from 'react';
 
-import { Button, Separator, Toolbar } from 'storybook/internal/components';
-import { ZoomIcon, ZoomOutIcon, ZoomResetIcon } from '@storybook/icons';
+import { Button, Separator, ToggleButton, Toolbar } from 'storybook/internal/components';
+import { CommentIcon, MarkupIcon, PointerDefaultIcon, ZoomIcon, ZoomOutIcon, ZoomResetIcon } from '@storybook/icons';
 import { styled } from 'storybook/theming/emotion';
 
+import { type BoardMode, MODE_LABELS, MODE_SHORTCUTS } from '../../board/modes';
 import { MAX_ZOOM, MIN_ZOOM } from '../../board/viewport';
+
+const MODE_ICONS: Record<BoardMode, React.ReactNode> = {
+  select: <PointerDefaultIcon />,
+  comment: <CommentIcon />,
+  draw: <MarkupIcon />,
+};
 
 export interface BoardToolbarProps {
   zoom: number;
@@ -22,6 +34,11 @@ export interface BoardToolbarProps {
   onResetZoom: () => void;
   onFit: () => void;
   canFit: boolean;
+  /** The current board mode. */
+  mode?: BoardMode;
+  /** The modes the board offers, in switcher order (the switcher shows with two or more). */
+  modes?: readonly BoardMode[];
+  onModeChange?: (mode: BoardMode) => void;
 }
 
 const Floating = styled.div(({ theme }) => ({
@@ -42,11 +59,40 @@ const Percent = styled(Button)({
   fontVariantNumeric: 'tabular-nums',
 });
 
-export function BoardToolbar({ zoom, onZoomIn, onZoomOut, onResetZoom, onFit, canFit }: BoardToolbarProps) {
+export function BoardToolbar({
+  zoom,
+  onZoomIn,
+  onZoomOut,
+  onResetZoom,
+  onFit,
+  canFit,
+  mode = 'select',
+  modes = [],
+  onModeChange,
+}: BoardToolbarProps) {
   const percent = `${Math.round(zoom * 100)}%`;
   return (
     <Floating data-colab-board-toolbar="">
-      <Toolbar aria-label="Canvas zoom" innerStyle={{ gap: 2, paddingInline: 4 }}>
+      <Toolbar aria-label="Canvas tools" innerStyle={{ gap: 2, paddingInline: 4 }}>
+        {modes.length > 1 && (
+          <>
+            {modes.map((option) => (
+              <ToggleButton
+                key={option}
+                variant="ghost"
+                padding="small"
+                pressed={option === mode}
+                ariaLabel={MODE_LABELS[option]}
+                tooltip={`${MODE_LABELS[option]} (${MODE_SHORTCUTS[option].toUpperCase()})`}
+                data-colab-mode={option}
+                onClick={() => onModeChange?.(option)}
+              >
+                {MODE_ICONS[option]}
+              </ToggleButton>
+            ))}
+            <Separator />
+          </>
+        )}
         <Button
           variant="ghost"
           padding="small"

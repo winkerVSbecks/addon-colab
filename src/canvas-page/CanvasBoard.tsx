@@ -12,6 +12,8 @@ import { styled, useTheme } from 'storybook/theming/emotion';
 
 import { inStableOrder, isOnTop, raiseSettled, withRaised } from '../board/frame-order';
 import { boardKeyAction, focusPlace } from '../board/keyboard';
+import { BOARD_MODES, type BoardMode } from '../board/modes';
+import type { UndoEntry } from '../board/undo-stack';
 import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect } from '../board/frame-defaults';
 import { type StoryTitle, storyTitle, storyTitleFromId } from '../board/story-title';
 import { boundsOf, worldRectToScreen } from '../board/viewport';
@@ -21,6 +23,7 @@ import { BoardNotice, type BoardNoticeContent } from './board/BoardNotice';
 import { BoardToolbar } from './board/BoardToolbar';
 import { FrameBody } from './board/FrameBody';
 import { FrameChrome, type GestureHandlers, type ResizeEdge } from './board/FrameChrome';
+import { type ModeHandlers, ModeLayer } from './board/ModeLayer';
 import { drawableCanvasProps } from './board/html-in-canvas';
 import { type StoryStatus, getPreview } from './board/story-mount';
 import { useBoardView } from './board/use-board-view';
@@ -28,6 +31,7 @@ import { type PaintScene, useDrawableCanvas } from './board/use-drawable-canvas'
 import { useFrameEdits } from './board/use-frame-edits';
 import { usePanZoom } from './board/use-pan-zoom';
 import { useStoryDrop } from './board/use-story-drop';
+import { useUndoStack } from './board/use-undo-stack';
 
 export interface CanvasBoardProps {
   canvas: CanvasFile;
@@ -94,9 +98,23 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
-  const [notice, setNotice] = useState<BoardNoticeContent | null>(null);
+  // A notice may offer Undo for one undo-stack entry; a later notice replaces the message but the
+  // entry stays on the stack (⌘Z still undoes it).
+  const [notice, setNotice] = useState<(BoardNoticeContent & { entry?: UndoEntry }) | null>(null);
   const dismissNotice = useCallback(() => setNotice(null), []);
   const showError = useCallback((message: string) => setNotice({ message, tone: 'error' }), []);
+  const undo = useUndoStack(canvas.id);
+  const undoStack = undo.stack;
+  /** Shows a notice whose Undo button undoes `entry` (for as long as the entry is on the stack). */
+  const showUndoable = useCallback(
+    (message: string, entry: UndoEntry) => setNotice({ message, tone: 'info', entry }),
+    [],
+  );
+
+  // Board modes (src/board/modes.ts). Each mode other than select plugs its press handlers in here;
+  // the switcher offers only modes that have handlers.
+  const [mode, setMode] = useState<BoardMode>('select');
+  const modeHandlers: Partial<Record<BoardMode, ModeHandlers>> = {};
 
   const edits = useFrameEdits(canvas, channel, showError);
   // Selecting a frame brings it to the front: shown at once, and kept until the file agrees.
@@ -176,9 +194,8 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     [channel, showError],
   );
 
-  // Removing a frame: it goes at once, focus moves to the board (its title is gone), and a notice
-  // offers Undo, which puts it back with the same id, position, size and place in the stacking order.
-  const undoRef = useRef<(() => void) | null>(null);
+  // Removing a frame: it goes at once, focus moves to the board (its title is gone), and an undo
+  // entry puts it back with the same id, position, size and place in the stacking order.
   const editsRemove = edits.remove;
   const editsRestore = edits.restore;
   const remove = useCallback(
@@ -188,51 +205,87 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
       // Its place in the order as shown (a frame selected by its title has just come to the front).
       const index = framesRef.current.findIndex((f) => f.id === frameId);
       const name = titlesRef.current.get(frameId)?.short ?? storyTitleFromId(frame.storyId).short;
-      const removed = editsRemove(frameId);
+      let removed = editsRemove(frameId);
       rootRef.current?.focus({ preventScroll: true });
-      const undo = () => {
-        if (undoRef.current !== undo) return;
-        undoRef.current = null;
-        setNotice(null);
+      const entry = undoStack.push({
+        label: `Remove ${name}`,
         // The removal must have landed before the frame can go back under the same id.
-        void removed
-          .then(() => editsRestore(frame, index < 0 ? fileRef.current.frames.length : index))
-          .then((restored) => {
-            if (!restored) return;
+        undo: async () => {
+          await removed;
+          const restored = await editsRestore(frame, index < 0 ? fileRef.current.frames.length : index);
+          if (restored) {
             setSelectedId(frame.id);
             rootRef.current?.focus({ preventScroll: true });
-          });
-      };
-      undoRef.current = undo;
-      setNotice({ message: `Removed ${name}`, tone: 'info', action: { label: 'Undo', run: undo } });
+          }
+          return restored;
+        },
+        redo: () => {
+          removed = editsRemove(frameId);
+          return removed;
+        },
+      });
+      showUndoable(`Removed ${name}`, entry);
     },
-    [editsRemove, editsRestore],
+    [editsRemove, editsRestore, undoStack, showUndoable],
   );
-  // Undo is on offer only while its notice is showing.
-  useEffect(() => {
-    if (!notice?.action) undoRef.current = null;
-  }, [notice]);
 
-  // Escape deselects when focus is on the board, and ⌘Z undoes a removal while its notice shows.
-  // Delete/Backspace are handled only by a frame's title (FrameChrome): a press inside a story
-  // leaves focus on the board root or in the story, and must never remove the frame
-  // (src/board/keyboard.ts).
+  const undoLatest = useCallback(
+    (direction: 'undo' | 'redo') => {
+      const entry = direction === 'undo' ? undoStack.nextUndo : undoStack.nextRedo;
+      if (!entry) return;
+      void (direction === 'undo' ? undoStack.undo() : undoStack.redo()).then((done) => {
+        if (done) setNotice({ message: `${direction === 'undo' ? 'Undid' : 'Redid'}: ${done.label}`, tone: 'info' });
+      });
+    },
+    [undoStack],
+  );
+
+  // The notice as shown: Undo only while its entry can still be undone. Memoised so the notice's
+  // timer is not restarted by unrelated re-renders.
+  const shownNotice = useMemo<BoardNoticeContent | null>(() => {
+    if (!notice) return null;
+    const { entry, ...content } = notice;
+    if (!entry || !undoStack.has(entry)) return content;
+    const run = () => void undoStack.undoEntry(entry).then(() => setNotice(null));
+    return { ...content, action: { label: 'Undo', run } };
+    // `undo.version` tracks `undoStack.has`.
+  }, [notice, undoStack, undo.version]);
+
+  const changeMode = useCallback((next: BoardMode) => {
+    setMode(next);
+    if (next !== 'select') setSelectedId(null);
+  }, []);
+
+  // The board's only key handler (rules in src/board/keyboard.ts): Escape leaves a mode or
+  // deselects, ⌘Z / ⇧⌘Z undo and redo, V/C/D switch mode. Delete/Backspace are handled only by a
+  // frame's title (FrameChrome): a press inside a story leaves focus on the board root or in the
+  // story, and must never remove the frame.
+  const keyState = {
+    hasSelection: selectedId !== null,
+    canUndo: undo.canUndo,
+    canRedo: undo.canRedo,
+    mode,
+    modes: BOARD_MODES.filter((option) => option === 'select' || modeHandlers[option]),
+  };
+  const keyStateRef = useRef(keyState);
+  keyStateRef.current = keyState;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const place = focusPlace(document.activeElement);
-      const action = boardKeyAction(event, place, {
-        hasSelection: selectedId !== null,
-        canUndo: undoRef.current !== null,
-      });
+      const action = boardKeyAction(event, focusPlace(document.activeElement), keyStateRef.current);
+      if (!action) return;
       if (action === 'deselect') setSelectedId(null);
-      else if (action === 'undo') {
+      else if (action === 'exit-mode') changeMode('select');
+      else if (action === 'undo' || action === 'redo') {
         event.preventDefault();
-        undoRef.current?.();
+        undoLatest(action);
+      } else {
+        event.preventDefault();
+        changeMode(action.slice('mode:'.length) as BoardMode);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedId]);
+  }, [changeMode, undoLatest]);
 
   const onElement = useCallback((frameId: string, element: HTMLDivElement | null) => {
     if (element) elementsRef.current.set(frameId, element);
@@ -341,7 +394,8 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
       data-moving={moving ? '' : undefined}
       data-drop-target={dropping ? '' : undefined}
       // Read by the browser checks in scripts/: the viewport and the frames as shown.
-      data-colab-board-state={JSON.stringify({ view: board.view, frames, selectedId })}
+      data-colab-board-state={JSON.stringify({ view: board.view, frames, selectedId, mode })}
+      data-colab-mode={mode}
       style={{ visibility: board.ready ? 'visible' : 'hidden' }}
       onPointerDownCapture={onPointerDownCapture}
     >
@@ -389,8 +443,15 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
           );
         })}
       </ChromeLayer>
+      <ModeLayer
+        mode={mode}
+        handlers={modeHandlers[mode]}
+        view={board.view}
+        spaceHeld={spaceHeld}
+        onPress={() => rootRef.current?.focus({ preventScroll: true })}
+      />
       {spaceHeld && <PanCatcher data-colab-pan-catcher="" />}
-      <BoardNotice notice={notice} onDismiss={dismissNotice} />
+      <BoardNotice notice={shownNotice} onDismiss={dismissNotice} />
       <BoardToolbar
         zoom={board.view.zoom}
         onZoomIn={() => board.zoomStep(1)}
@@ -398,6 +459,9 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         onResetZoom={() => board.zoomTo(1)}
         onFit={board.fit}
         canFit={frames.length > 0}
+        mode={mode}
+        modes={keyState.modes}
+        onModeChange={changeMode}
       />
     </Root>
   );

@@ -137,3 +137,60 @@ describe('⌘Z', () => {
     ).toBeNull();
   });
 });
+
+describe('⇧⌘Z (redo)', () => {
+  const state = { hasSelection: false, canUndo: true, canRedo: true };
+
+  it('redoes from the board or its controls when there is something to redo', () => {
+    for (const place of ['board', 'none', 'frame-title', 'control'] as const) {
+      expect(boardKeyAction({ key: 'z', metaKey: true, shiftKey: true }, place, state)).toBe('redo');
+    }
+    expect(boardKeyAction({ key: 'Z', ctrlKey: true, shiftKey: true }, 'board', state)).toBe('redo');
+    expect(boardKeyAction({ key: 'y', ctrlKey: true }, 'board', state)).toBe('redo');
+  });
+
+  it('is left alone with nothing to redo, in text fields and inside stories', () => {
+    expect(
+      boardKeyAction({ key: 'z', metaKey: true, shiftKey: true }, 'board', { hasSelection: false, canUndo: true }),
+    ).toBeNull();
+    expect(boardKeyAction({ key: 'z', metaKey: true, shiftKey: true }, 'text', state)).toBeNull();
+    expect(boardKeyAction({ key: 'z', metaKey: true, shiftKey: true }, 'story', state)).toBeNull();
+    // ⌘Y is not redo on macOS (it is "show history" in some browsers).
+    expect(boardKeyAction({ key: 'y', metaKey: true }, 'board', state)).toBeNull();
+  });
+});
+
+describe('modes', () => {
+  const modes = ['select', 'comment', 'draw'] as const;
+
+  it('Escape leaves a non-select mode before it deselects', () => {
+    for (const place of ['board', 'none', 'frame-title', 'control'] as const) {
+      expect(boardKeyAction({ key: 'Escape' }, place, { hasSelection: true, mode: 'comment', modes })).toBe(
+        'exit-mode',
+      );
+    }
+    expect(boardKeyAction({ key: 'Escape' }, 'board', { hasSelection: true, mode: 'select', modes })).toBe('deselect');
+  });
+
+  it('Escape in a text field or a story belongs to them, even in a mode', () => {
+    expect(boardKeyAction({ key: 'Escape' }, 'text', { hasSelection: false, mode: 'comment', modes })).toBeNull();
+    expect(boardKeyAction({ key: 'Escape' }, 'story', { hasSelection: false, mode: 'draw', modes })).toBeNull();
+  });
+
+  it('V, C and D switch mode only with focus on the board or nowhere', () => {
+    expect(boardKeyAction({ key: 'c' }, 'board', { hasSelection: false, modes })).toBe('mode:comment');
+    expect(boardKeyAction({ key: 'D' }, 'none', { hasSelection: false, modes })).toBe('mode:draw');
+    expect(boardKeyAction({ key: 'v' }, 'board', { hasSelection: false, mode: 'comment', modes })).toBe('mode:select');
+    for (const place of ['story', 'text', 'frame-title', 'control'] as const) {
+      expect(boardKeyAction({ key: 'c' }, place, { hasSelection: false, modes })).toBeNull();
+    }
+  });
+
+  it('ignores mode keys with modifiers, for the current mode, or for modes the board does not offer', () => {
+    expect(boardKeyAction({ key: 'c', metaKey: true }, 'board', { hasSelection: false, modes })).toBeNull();
+    expect(boardKeyAction({ key: 'c', shiftKey: true }, 'board', { hasSelection: false, modes })).toBeNull();
+    expect(boardKeyAction({ key: 'c' }, 'board', { hasSelection: false, mode: 'comment', modes })).toBeNull();
+    expect(boardKeyAction({ key: 'd' }, 'board', { hasSelection: false, modes: ['select', 'comment'] })).toBeNull();
+    expect(boardKeyAction({ key: 'c' }, 'board', { hasSelection: false })).toBeNull();
+  });
+});
