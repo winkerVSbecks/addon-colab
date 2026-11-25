@@ -32,6 +32,11 @@ import { useFrameEdits } from './board/use-frame-edits';
 import { usePanZoom } from './board/use-pan-zoom';
 import { useStoryDrop } from './board/use-story-drop';
 import { useUndoStack } from './board/use-undo-stack';
+// Drawing (task 8): strokes over the frames, and draw mode's tool.
+import { DEFAULT_DRAW_SETTINGS, DRAW_COLORS, DRAW_WIDTHS, DrawOptions } from './board/DrawOptions';
+import { StrokeLayer, type StrokeLayerHandle } from './board/StrokeLayer';
+import { useDrawTool } from './board/use-draw-tool';
+import { useStrokes } from './board/use-strokes';
 
 export interface CanvasBoardProps {
   canvas: CanvasFile;
@@ -63,6 +68,14 @@ const Surface = styled.canvas({
   width: '100%',
   height: '100%',
   display: 'block',
+  // Story CSS shares this document: a `canvas { … }` rule must not move the stories off the strokes.
+  maxWidth: 'none',
+  maxHeight: 'none',
+  margin: 0,
+  padding: 0,
+  border: 0,
+  opacity: 1,
+  transform: 'none',
 });
 
 /** Frame titles, outlines and handles, above the canvas; only the controls themselves catch the pointer. */
@@ -134,6 +147,24 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   );
   const measured = frames.every((frame) => heights.has(frame.id));
   const board = useBoardView(canvas.id, size, bounds, measured);
+
+  // Drawing: strokes in world coordinates, drawn above every frame; draw mode's pen and eraser.
+  const strokes = useStrokes(canvas, channel, undoStack, showError);
+  const strokeLayerRef = useRef<StrokeLayerHandle>(null);
+  const drawTool = useDrawTool({
+    strokes,
+    layer: strokeLayerRef,
+    view: board.view,
+    colors: DRAW_COLORS.map((option) => option.value),
+    widths: DRAW_WIDTHS.map((option) => option.value),
+    defaults: DEFAULT_DRAW_SETTINGS,
+  });
+  modeHandlers.draw = drawTool.handlers;
+  const strokesClear = strokes.clear;
+  const clearDrawing = useCallback(() => {
+    void strokesClear().then((entry) => entry && showUndoable(`${entry.label.replace('Clear', 'Cleared')}`, entry));
+    rootRef.current?.focus({ preventScroll: true });
+  }, [strokesClear, showUndoable]);
   const deselect = useCallback(() => setSelectedId(null), []);
   const { spaceHeld, panning } = usePanZoom({ root: rootRef, surface: canvasRef, board, onBackgroundPress: deselect });
 
@@ -417,6 +448,14 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
             />
           ))}
       </Surface>
+      <StrokeLayer
+        ref={strokeLayerRef}
+        view={board.view}
+        size={size}
+        strokes={strokes.strokes}
+        ink={theme.color.defaultText}
+        fadedIds={drawTool.fadedIds}
+      />
       <ChromeLayer>
         {domFrames.map((frame) => {
           const title = titles.get(frame.id) ?? storyTitleFromId(frame.storyId);
@@ -451,6 +490,15 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         onPress={() => rootRef.current?.focus({ preventScroll: true })}
       />
       {spaceHeld && <PanCatcher data-colab-pan-catcher="" />}
+      {mode === 'draw' && (
+        <DrawOptions
+          settings={drawTool.settings}
+          onChange={drawTool.setSettings}
+          strokeCount={strokes.strokes.length}
+          onClear={clearDrawing}
+          container={rootRef.current}
+        />
+      )}
       <BoardNotice notice={shownNotice} onDismiss={dismissNotice} />
       <BoardToolbar
         zoom={board.view.zoom}
