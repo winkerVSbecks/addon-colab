@@ -225,8 +225,8 @@ const xs = new Set(stacked.map((b) => Math.round(b.x)));
 check('several comments on the same anchor fan out (4 distinct pins)', stacked.every(Boolean) && xs.size === 4, stacked);
 check('the board did not move or select while agent comments arrived', JSON.stringify((await boardState(page)).view) === JSON.stringify({ x: 60, y: 60, zoom: 1 }) && (await boardState(page)).selectedId === null);
 
-// Detached: an element target whose selector no longer matches (and no role/name to fall back on).
-const detachedTarget = { ...target, selector: 'button.gone-after-refactor', role: undefined, name: undefined };
+// Detached: an element target whose selector no longer matches (and no role, name or text to search for).
+const detachedTarget = { ...target, selector: 'button.gone-after-refactor', text: '', role: undefined, name: undefined };
 delete detachedTarget.role;
 delete detachedTarget.name;
 const detached = await mcp('add_canvas_comment', { canvasId: 'board', body: 'Detached', anchor: { type: 'element', frameId: 'frame_hdr', target: detachedTarget } });
