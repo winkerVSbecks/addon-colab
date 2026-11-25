@@ -4,7 +4,7 @@ import { addons } from 'storybook/preview-api';
 import type { DecoratorFunction, Renderer } from 'storybook/internal/types';
 
 import { CANVAS_PARAMETER } from '../canvas-entry';
-import { themeFromParameters } from '../ui-theme';
+import { canvasThemeParameters } from '../ui-theme';
 import { CanvasPage } from './CanvasPage';
 
 /**
@@ -18,6 +18,6 @@ export const withCanvasPage: DecoratorFunction<Renderer> = (Story, context) => {
     key: fileId,
     fileId,
     channel: addons.getChannel(),
-    theme: themeFromParameters(context.parameters),
+    ...canvasThemeParameters(context.parameters),
   }) as unknown as ReturnType<typeof Story>;
 };

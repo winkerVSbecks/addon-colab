@@ -14,6 +14,7 @@ import { type CanvasSummary, type ChannelLike, type InvalidCanvas, requestCanvas
 import { CanvasDeleteDialog, CanvasNameDialog } from './CanvasDialogs';
 import { CanvasMenu } from './CanvasMenu';
 import { leaveCanvas, openCanvas } from './navigation';
+import { useSyncManagerTheme } from './theme';
 import { useCanvasListing } from './use-canvas-listing';
 
 type Dialog =
@@ -27,6 +28,7 @@ export function CanvasTool() {
   const { storyId } = useStorybookState();
   const channel = useMemo(() => addons.getChannel() as ChannelLike, []);
   const listing = useCanvasListing(channel);
+  useSyncManagerTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' });
   const close = (open: boolean) => !open && setDialog({ kind: 'none' });

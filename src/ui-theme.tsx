@@ -1,8 +1,7 @@
 /**
  * Storybook's theme for UI the addon draws outside the manager (the canvas page in the preview, and
- * this addon's own stories). The manager themes its UI itself; the preview has no theme, so this
- * follows addon-docs (`DocsContainer` wraps docs pages in `ThemeProvider` with
- * `parameters.docs.theme`, defaulting to the system colour scheme, as the manager does).
+ * this addon's own stories). The manager themes its UI itself; the preview has no theme of its own.
+ * The canvas page follows the manager's theme (see `chooseCanvasTheme`); stories pick one directly.
  */
 import React, { type ReactNode } from 'react';
 
@@ -17,14 +16,30 @@ export function resolveTheme(choice: ThemeChoice) {
   return convert(themes[choice ?? getPreferredColorScheme()]);
 }
 
-/**
- * The theme for the canvas page: `parameters.colab.theme`, else the docs theme (projects that theme
- * their docs usually match the manager there), else the system colour scheme.
- */
-export function themeFromParameters(parameters: Record<string, unknown> | undefined): ThemeChoice {
+/** The theme choices a story's parameters make for the canvas page. */
+export interface CanvasThemeParameters {
+  /** `parameters.colab.theme`: wins over the manager theme. */
+  theme?: ThemeChoice;
+  /** `parameters.docs.theme`: used only until (or unless) the manager says which theme it uses. */
+  fallback?: ThemeChoice;
+}
+
+export function canvasThemeParameters(parameters: Record<string, unknown> | undefined): CanvasThemeParameters {
   const colab = parameters?.colab as { theme?: ThemeChoice } | undefined;
   const docs = parameters?.docs as { theme?: ThemeChoice } | undefined;
-  return colab?.theme ?? docs?.theme;
+  return { theme: colab?.theme, fallback: docs?.theme };
+}
+
+/**
+ * The theme for the canvas page, in order: `parameters.colab.theme`, the manager's theme (sent over
+ * the channel, see `src/theme-sync.ts`), `parameters.docs.theme`, the system colour scheme.
+ */
+export function chooseCanvasTheme({
+  theme,
+  manager,
+  fallback,
+}: CanvasThemeParameters & { manager?: ThemeVars }): ThemeChoice {
+  return theme ?? manager ?? fallback;
 }
 
 export function StorybookThemeProvider({ theme, children }: { theme: ThemeChoice; children: ReactNode }) {

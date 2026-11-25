@@ -8,6 +8,7 @@ import { ADDON_ID } from './constants';
 import { CanvasTool } from './manager/CanvasTool';
 import { installCanvasLayout } from './manager/layout';
 import { leaveCanvas, leaveRemovedCanvas } from './manager/navigation';
+import { installManagerTheme } from './manager/theme';
 
 const CANVAS_TOOL_ID = `${ADDON_ID}/canvases`;
 
@@ -34,6 +35,8 @@ addons.register(ADDON_ID, (api) => {
   // A canvas deleted elsewhere (another tab, an MCP agent, a hand edit) while it is open: leave its
   // page. The store's event usually comes first; the index check catches deletes it does not see.
   const channel = addons.getChannel();
+  // Canvas pages follow the manager's theme, not the system colour scheme.
+  installManagerTheme(channel as ChannelLike);
   onCanvasChanged(channel as ChannelLike, (event) => {
     if (event.type === 'deleted') void leaveCanvas(api, event.id);
   });

@@ -6,9 +6,10 @@
 import React, { useEffect, useState } from 'react';
 
 import { type ChannelLike, onCanvasChanged, requestCanvas } from '../channel';
-import { type ThemeChoice, StorybookThemeProvider } from '../ui-theme';
+import { type ThemeChoice, StorybookThemeProvider, chooseCanvasTheme } from '../ui-theme';
 import { CanvasBoard } from './CanvasBoard';
 import { type CanvasPageState, CanvasPageView } from './CanvasPageView';
+import { useManagerTheme } from './manager-theme';
 import { canvasPageStateFromError, initialCanvasPageState } from './page-state';
 import { supportsHtmlInCanvas } from './support';
 
@@ -16,7 +17,10 @@ export interface CanvasPageProps {
   /** The canvas file id (file name without `.json`). */
   fileId: string;
   channel: ChannelLike;
+  /** Overrides the manager's theme (`parameters.colab.theme`). */
   theme?: ThemeChoice;
+  /** Used until the manager says which theme it uses (`parameters.docs.theme`). */
+  fallback?: ThemeChoice;
   /** For tests and stories; defaults to feature detection. */
   supported?: boolean;
 }
@@ -57,10 +61,11 @@ export function useCanvasPageState(fileId: string, channel: ChannelLike, support
   return state;
 }
 
-export function CanvasPage({ fileId, channel, theme, supported = supportsHtmlInCanvas() }: CanvasPageProps) {
+export function CanvasPage({ fileId, channel, theme, fallback, supported = supportsHtmlInCanvas() }: CanvasPageProps) {
   const state = useCanvasPageState(fileId, channel, supported);
+  const manager = useManagerTheme(channel);
   return (
-    <StorybookThemeProvider theme={theme}>
+    <StorybookThemeProvider theme={chooseCanvasTheme({ theme, manager, fallback })}>
       <CanvasPageView state={state} renderBoard={(canvas) => <CanvasBoard canvas={canvas} channel={channel} />} />
     </StorybookThemeProvider>
   );
