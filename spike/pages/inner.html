@@ -1,0 +1,16 @@
+<!doctype html><html><body style="margin:0;font:14px sans-serif;background:#e6f2ff">
+<div style="padding:10px">
+  <button id="btn" style="width:120px;height:40px">Click me</button>
+  <span id="count">0</span>
+  <input id="inp" style="width:120px" placeholder="type here">
+  <div id="hover" style="margin-top:8px;padding:6px;background:#cde">hover target</div>
+</div>
+<script>
+  window.log = [];
+  let n = 0;
+  btn.addEventListener('click', (e) => { n++; count.textContent = n; log.push(['click', e.clientX, e.clientY]); parent.postMessage({ type: 'inner-click', n }, '*'); });
+  hover.addEventListener('pointerenter', () => { hover.style.background = '#f90'; log.push(['enter']); });
+  hover.addEventListener('pointerleave', () => { hover.style.background = '#cde'; });
+  inp.addEventListener('input', () => log.push(['input', inp.value]));
+</script>
+</body></html>
