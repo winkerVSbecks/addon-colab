@@ -5,27 +5,9 @@
 // - a collapsed component row is not a drag source and still expands on click;
 // - a canvas row cannot be dropped onto a canvas.
 // Resets .sb-task6/canvases/board.json first. Run: SB=http://127.0.0.1:6160 node scripts/check-board-drag.mjs
-import { writeFileSync } from 'node:fs';
+import { CANVAS_FILE, SB, resetCanvas, boardState, check, done, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';
 
-import { SB, boardState, check, done, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';
-
-const CANVAS_FILE = new URL('../.sb-task6/canvases/board.json', import.meta.url);
-const BASE = {
-  schemaVersion: 1,
-  id: 'board',
-  name: 'Board',
-  createdAt: '2026-11-25T17:00:00.000Z',
-  updatedAt: '2026-11-25T17:00:00.000Z',
-  frames: [
-    { id: 'frame_btn', storyId: 'example-button--primary', x: 0, y: 0, width: 360 },
-    { id: 'frame_hdr', storyId: 'example-header--logged-out', x: 420, y: 0, width: 960 },
-    { id: 'frame_page', storyId: 'example-page--logged-out', x: 0, y: 200, width: 960 },
-  ],
-  comments: [],
-  strokes: [],
-};
-writeFileSync(CANVAS_FILE, JSON.stringify(BASE, null, 2) + '\n');
-await new Promise((resolve) => setTimeout(resolve, 500));
+await resetCanvas();
 
 const BOARD_URL = `${SB}/?path=/story/colab-canvas-board--canvas`;
 const { browser, page, errors } = await launch({ dpr: 2 });
@@ -144,5 +126,5 @@ check('Enter opens the focused story', page.url().includes('example-button--seco
 
 check('no page errors', errors.length === 0, errors);
 await browser.close();
-writeFileSync(CANVAS_FILE, JSON.stringify(BASE, null, 2) + '\n');
+await resetCanvas();
 done();

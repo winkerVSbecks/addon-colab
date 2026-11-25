@@ -10,7 +10,7 @@
 import React from 'react';
 
 import { Button, Separator, Toolbar } from 'storybook/internal/components';
-import { ExpandAltIcon, ZoomIcon, ZoomOutIcon } from '@storybook/icons';
+import { ZoomIcon, ZoomOutIcon, ZoomResetIcon } from '@storybook/icons';
 import { styled } from 'storybook/theming/emotion';
 
 import { MAX_ZOOM, MIN_ZOOM } from '../../board/viewport';
@@ -70,7 +70,7 @@ export function BoardToolbar({ zoom, onZoomIn, onZoomOut, onResetZoom, onFit, ca
         </Button>
         <Separator />
         <Button variant="ghost" padding="small" ariaLabel="Zoom to fit all stories" onClick={onFit} disabled={!canFit}>
-          <ExpandAltIcon />
+          <ZoomResetIcon />
         </Button>
       </Toolbar>
     </Floating>

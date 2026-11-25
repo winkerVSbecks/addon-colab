@@ -1,11 +1,11 @@
 // "Add to canvas" from the toolbar: adds the open story to the chosen canvas, to the right of its
 // other frames, and the notification opens the canvas. Hidden on canvas pages.
-// Run: SB=http://127.0.0.1:6160 node scripts/check-board-add.mjs (after check-board-drag.mjs reset the canvas)
+// Run: SB=http://127.0.0.1:6160 node scripts/check-board-add.mjs 
 import { readFileSync } from 'node:fs';
 
-import { SB, check, done, launch, waitForBoard } from './board-lib.mjs';
+import { CANVAS_FILE, SB, check, done, launch, resetCanvas, waitForBoard } from './board-lib.mjs';
 
-const CANVAS_FILE = new URL('../.sb-task6/canvases/board.json', import.meta.url);
+await resetCanvas();
 const read = () => JSON.parse(readFileSync(CANVAS_FILE, 'utf8'));
 const before = read();
 const right = Math.max(...before.frames.map((f) => f.x + f.width));
@@ -33,4 +33,5 @@ check('clicking the notification opens the canvas', page.url().includes('colab-c
 await waitForBoard(page, after.frames.length);
 check('no page errors', errors.length === 0, errors);
 await browser.close();
+await resetCanvas();
 done();

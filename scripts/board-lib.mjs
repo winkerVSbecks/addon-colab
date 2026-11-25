@@ -101,3 +101,28 @@ export async function setView(page, canvasId, view) {
     { canvasId, view },
   );
 }
+
+/** The test canvas the checks use: `.sb-task6/canvases/board.json` with three example stories. */
+export const CANVAS_FILE = new URL('../.sb-task6/canvases/board.json', import.meta.url);
+export const BASE_CANVAS = {
+  schemaVersion: 1,
+  id: 'board',
+  name: 'Board',
+  createdAt: '2026-11-25T17:00:00.000Z',
+  updatedAt: '2026-11-25T17:00:00.000Z',
+  frames: [
+    { id: 'frame_btn', storyId: 'example-button--primary', x: 0, y: 0, width: 360 },
+    { id: 'frame_hdr', storyId: 'example-header--logged-out', x: 420, y: 0, width: 960 },
+    { id: 'frame_page', storyId: 'example-page--logged-out', x: 0, y: 200, width: 960 },
+  ],
+  comments: [],
+  strokes: [],
+};
+
+/** Writes the three-story test canvas and waits for the store's watcher to pick it up. */
+export async function resetCanvas() {
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  mkdirSync(new URL('.', CANVAS_FILE), { recursive: true });
+  writeFileSync(CANVAS_FILE, JSON.stringify(BASE_CANVAS, null, 2) + '\n');
+  await new Promise((resolve) => setTimeout(resolve, 600));
+}

@@ -1,10 +1,11 @@
 // Clicking a button inside a story on the board triggers the story's own behaviour at zoom 0.5, 1
 // and 2 (panned), at DPR 1 and 2; overlapping frames hit-test the top one. Needs the canvas
 // `board` with frame_page (Page, logged out). Run: SB=http://127.0.0.1:6160 node scripts/check-board-hit.mjs
-import { SB, boardState, check, done, launch, modelPoint, previewFrame, setView, waitForBoard } from './board-lib.mjs';
+import { SB, resetCanvas, boardState, check, done, launch, modelPoint, previewFrame, setView, waitForBoard } from './board-lib.mjs';
 
 const URL = `${SB}/?path=/story/colab-canvas-board--canvas`;
 
+await resetCanvas();
 for (const dpr of [1, 2]) {
   const { browser, page, errors } = await launch({ dpr });
   await page.goto(`${SB}/`);

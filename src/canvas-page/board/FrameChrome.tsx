@@ -141,7 +141,8 @@ function useGesture(handlers: () => GestureHandlers | undefined, onPress?: () =>
       event.stopPropagation();
       // preventDefault keeps the press from focusing anything; keyboard shortcuts need the focus here.
       const element = event.currentTarget as HTMLElement;
-      if (element.tabIndex >= 0) element.focus({ preventScroll: true });
+      // A pointer press shows no focus ring (`focusVisible: false`); Tab still does.
+      if (element.tabIndex >= 0) element.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
       else (element.closest('[data-colab-board]') as HTMLElement | null)?.focus({ preventScroll: true });
       onPress?.();
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);

@@ -1,9 +1,10 @@
 // Pan and zoom input on the board: wheel pans, ctrl+wheel zooms around the pointer, dragging empty
 // space pans, Space+drag pans over a story without clicking it, toolbar buttons zoom, and the view
 // survives a reload. Run: SB=http://127.0.0.1:6160 node scripts/check-board-view.mjs
-import { SB, boardState, check, done, launch, modelPoint, previewFrame, setView, waitForBoard } from './board-lib.mjs';
+import { SB, resetCanvas, boardState, check, done, launch, modelPoint, previewFrame, setView, waitForBoard } from './board-lib.mjs';
 
 // DPR 1: at DPR 2, CDP-synthesised wheel events arrive with half the requested delta.
+await resetCanvas();
 const { browser, page, errors } = await launch({ dpr: 1 });
 await page.goto(`${SB}/`);
 await setView(page, 'board', { x: 60, y: 40, zoom: 1 });
