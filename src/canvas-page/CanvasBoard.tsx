@@ -7,21 +7,23 @@
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { STORY_UNCHANGED } from 'storybook/internal/core-events';
+import { SELECT_STORY, STORY_UNCHANGED } from 'storybook/internal/core-events';
 import { styled, useTheme } from 'storybook/theming/emotion';
 
-import { frameRect } from '../board/frame-defaults';
-import { boundsOf } from '../board/viewport';
+import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect } from '../board/frame-defaults';
+import { boundsOf, worldRectToScreen } from '../board/viewport';
 import type { CanvasFile } from '../canvas-file';
 import { type ChannelLike, requestCanvas } from '../channel';
 import { BoardNotice } from './board/BoardNotice';
 import { BoardToolbar } from './board/BoardToolbar';
 import { FrameBody } from './board/FrameBody';
+import { FrameChrome, type GestureHandlers, type ResizeEdge } from './board/FrameChrome';
 import { drawableCanvasProps } from './board/html-in-canvas';
-import { getPreview } from './board/story-mount';
+import { type StoryStatus, getPreview } from './board/story-mount';
 import { useBoardView } from './board/use-board-view';
 import { type PaintScene, useDrawableCanvas } from './board/use-drawable-canvas';
-import { usePanZoom } from './board/use-pan-zoom';
+import { useFrameEdits } from './board/use-frame-edits';
+import { isEditable, usePanZoom } from './board/use-pan-zoom';
 import { useStoryDrop } from './board/use-story-drop';
 
 export interface CanvasBoardProps {
@@ -56,6 +58,15 @@ const Surface = styled.canvas({
   display: 'block',
 });
 
+/** Frame titles, outlines and handles, above the canvas; only the controls themselves catch the pointer. */
+const ChromeLayer = styled.div({
+  position: 'absolute',
+  inset: 0,
+  zIndex: 1,
+  pointerEvents: 'none',
+  overflow: 'hidden',
+});
+
 /** Covers the board while Space is held, so the drag pans and the stories get no hover. */
 const PanCatcher = styled.div({
   position: 'absolute',
@@ -65,15 +76,33 @@ const PanCatcher = styled.div({
   '[data-panning] > &': { cursor: 'grabbing' },
 });
 
+interface StoryTitle {
+  short: string;
+  full: string;
+}
+
+function titleOf(status: StoryStatus): StoryTitle | undefined {
+  const story = status.kind === 'ready' ? status.story : status.kind === 'error' ? status.story : undefined;
+  if (!story) return undefined;
+  const component = story.title.split('/').pop() ?? story.title;
+  return { short: `${component} / ${story.name}`, full: `${story.title} › ${story.name}` };
+}
+
 export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   const theme = useTheme();
   const preview = useMemo(() => getPreview(), []);
   const rootRef = useRef<HTMLDivElement>(null);
   const elementsRef = useRef(new Map<string, HTMLElement>());
   const [heights, setHeights] = useState<ReadonlyMap<string, number>>(new Map());
+  const [titles, setTitles] = useState<ReadonlyMap<string, StoryTitle>>(new Map());
   const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const dismissNotice = useCallback(() => setNotice(null), []);
 
-  const frames = canvas.frames;
+  const edits = useFrameEdits(canvas, channel, setNotice);
+  const frames = edits.frames;
   const scene = useRef<PaintScene>(null as unknown as PaintScene);
   const { canvasRef, size, paint } = useDrawableCanvas(rootRef, scene);
 
@@ -83,14 +112,14 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   );
   const measured = frames.every((frame) => heights.has(frame.id));
   const board = useBoardView(canvas.id, size, bounds, measured);
-  const { spaceHeld, panning } = usePanZoom({ root: rootRef, surface: canvasRef, board });
-  const [notice, setNotice] = useState<string | null>(null);
-  const dismissNotice = useCallback(() => setNotice(null), []);
+  const deselect = useCallback(() => setSelectedId(null), []);
+  const { spaceHeld, panning } = usePanZoom({ root: rootRef, surface: canvasRef, board, onBackgroundPress: deselect });
 
   const addFrame = useCallback(
     async (frame: { storyId: string; x: number; y: number; width: number }) => {
       try {
         const result = await requestCanvas(channel, 'addFrame', { canvasId: canvas.id, frame });
+        setSelectedId(result.frame.id);
         return result.frame.id;
       } catch (error) {
         setNotice(`Couldn't add the story: ${error instanceof Error ? error.message : String(error)}`);
@@ -117,16 +146,128 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     return () => channel.off(STORY_UNCHANGED, onUnchanged);
   }, [channel]);
 
+  // The selected frame was removed (here or elsewhere).
+  useEffect(() => {
+    if (selectedId && !frames.some((frame) => frame.id === selectedId)) setSelectedId(null);
+  }, [frames, selectedId]);
+
+  const remove = edits.remove;
+  // Delete/Backspace removes the selected frame and Escape deselects, unless the key is meant for a
+  // story (typing in it) or was handled by a frame's title.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !selectedId) return;
+      const active = document.activeElement;
+      if (isEditable(active) || active?.closest('[data-colab-frame]')) return;
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        remove(selectedId);
+      } else if (event.key === 'Escape') {
+        setSelectedId(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedId, remove]);
+
   const onElement = useCallback((frameId: string, element: HTMLDivElement | null) => {
     if (element) elementsRef.current.set(frameId, element);
     else elementsRef.current.delete(frameId);
   }, []);
+  const editsMeasured = edits.measured;
   const onMeasure = useCallback(
-    (frameId: string, height: number) =>
-      setHeights((current) => (current.get(frameId) === height ? current : new Map(current).set(frameId, height))),
-    [],
+    (frameId: string, height: number) => {
+      setHeights((current) => (current.get(frameId) === height ? current : new Map(current).set(frameId, height)));
+      editsMeasured(frameId, height);
+    },
+    [editsMeasured],
   );
-  const onStatus = useCallback(() => undefined, []);
+  const onStatus = useCallback((frameId: string, status: StoryStatus) => {
+    setTitles((current) => {
+      const title = titleOf(status);
+      if (!title || current.get(frameId)?.full === title.full) return current;
+      return new Map(current).set(frameId, title);
+    });
+  }, []);
+
+  // Gestures read the frame as it was when they started; the view cannot change mid-gesture.
+  const viewRef = useRef(board.view);
+  viewRef.current = board.view;
+  const framesRef = useRef(frames);
+  framesRef.current = frames;
+  const heightsRef = useRef(heights);
+  heightsRef.current = heights;
+
+  const moveHandlers = useCallback(
+    (frameId: string): GestureHandlers => {
+      let origin: { x: number; y: number } | undefined;
+      return {
+        onStart: () => {
+          const frame = framesRef.current.find((f) => f.id === frameId);
+          origin = frame && { x: frame.x, y: frame.y };
+          edits.setBusy(frameId, true);
+          setMoving(true);
+        },
+        onMove: (dx, dy) => {
+          if (!origin) return;
+          const zoom = viewRef.current.zoom;
+          edits.preview(frameId, { x: Math.round(origin.x + dx / zoom), y: Math.round(origin.y + dy / zoom) });
+        },
+        onEnd: (moved) => {
+          setMoving(false);
+          edits.setBusy(frameId, false);
+          if (moved && origin) edits.commit(frameId);
+        },
+      };
+    },
+    [edits],
+  );
+
+  const resizeHandlers = useCallback(
+    (frameId: string, edge: ResizeEdge): GestureHandlers => {
+      let origin: { width: number; height: number } | undefined;
+      return {
+        onStart: () => {
+          const frame = framesRef.current.find((f) => f.id === frameId);
+          if (!frame) return;
+          const height = heightsRef.current.get(frameId) ?? frame.height ?? MIN_FRAME_HEIGHT;
+          origin = { width: frame.width, height };
+          edits.setBusy(frameId, true);
+        },
+        onMove: (dx, dy) => {
+          if (!origin) return;
+          const zoom = viewRef.current.zoom;
+          const changes: { width?: number; height?: number } = {};
+          if (edge !== 's') changes.width = clampFrameSize(origin.width + dx / zoom, MIN_FRAME_WIDTH);
+          if (edge !== 'e') changes.height = clampFrameSize(origin.height + dy / zoom, MIN_FRAME_HEIGHT);
+          edits.preview(frameId, changes);
+        },
+        onEnd: (moved) => {
+          edits.setBusy(frameId, false);
+          if (moved && origin) edits.commit(frameId);
+        },
+      };
+    },
+    [edits],
+  );
+
+  const nudge = useCallback(
+    (frameId: string, dx: number, dy: number) => {
+      const frame = framesRef.current.find((f) => f.id === frameId);
+      if (!frame) return;
+      edits.preview(frameId, { x: frame.x + dx, y: frame.y + dy });
+      edits.commit(frameId);
+    },
+    [edits],
+  );
+
+  const openStory = useCallback((storyId: string) => channel.emit(SELECT_STORY, { storyId }), [channel]);
+
+  // Pressing inside a story selects its frame (without stopping the press: the story still gets it).
+  const onPointerDownCapture = (event: React.PointerEvent) => {
+    const frameId = (event.target as Element).closest?.('[data-colab-frame]')?.getAttribute('data-colab-frame');
+    if (frameId) setSelectedId(frameId);
+  };
 
   return (
     <Root
@@ -134,10 +275,12 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
       data-colab-board={canvas.id}
       tabIndex={-1}
       data-panning={panning ? '' : undefined}
+      data-moving={moving ? '' : undefined}
       data-drop-target={dropping ? '' : undefined}
       // Read by the browser checks in scripts/: the viewport and the frames as shown.
-      data-colab-board-state={JSON.stringify({ view: board.view, frames })}
+      data-colab-board-state={JSON.stringify({ view: board.view, frames, selectedId })}
       style={{ visibility: board.ready ? 'visible' : 'hidden' }}
+      onPointerDownCapture={onPointerDownCapture}
     >
       <Surface ref={canvasRef} {...drawableCanvasProps} aria-label={`Canvas ${canvas.name}`}>
         {preview &&
@@ -156,6 +299,32 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
             />
           ))}
       </Surface>
+      <ChromeLayer>
+        {frames.map((frame) => {
+          const title = titles.get(frame.id);
+          return (
+            <FrameChrome
+              key={frame.id}
+              frameId={frame.id}
+              rect={worldRectToScreen(board.view, {
+                x: frame.x,
+                y: frame.y,
+                width: frame.width,
+                height: heights.get(frame.id) ?? frame.height ?? MIN_FRAME_HEIGHT,
+              })}
+              title={title?.short ?? frame.storyId}
+              fullTitle={title?.full ?? frame.storyId}
+              selected={frame.id === selectedId}
+              onSelect={() => setSelectedId(frame.id)}
+              move={moveHandlers(frame.id)}
+              resize={(edge) => resizeHandlers(frame.id, edge)}
+              onNudge={(dx, dy) => nudge(frame.id, dx, dy)}
+              onRemove={() => remove(frame.id)}
+              onOpen={() => openStory(frame.storyId)}
+            />
+          );
+        })}
+      </ChromeLayer>
       {spaceHeld && <PanCatcher data-colab-pan-catcher="" />}
       <BoardNotice message={notice} onDismiss={dismissNotice} />
       <BoardToolbar
