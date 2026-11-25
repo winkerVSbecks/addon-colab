@@ -115,7 +115,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
     {
       title: 'Get a canvas',
       description:
-        'Returns one canvas: its story frames (story id, story file, position, size), every comment with its location and replies, and its freehand strokes summarised by bounds and by which story frames each one is within, crosses, surrounds or is near. Raw stroke points are left out unless includeStrokePoints is true.',
+        'Returns one canvas: its story frames (story id, story file, position, size), every comment with its location and replies, and its freehand strokes summarised by bounds (the box around the points of each stroke; it leaves out the line width, so the drawn line reaches up to width/2 further) and by which story frames each one is within, crosses, surrounds or is near. Raw stroke points are left out unless includeStrokePoints is true.',
       inputSchema: {
         canvasId,
         includeStrokePoints: z

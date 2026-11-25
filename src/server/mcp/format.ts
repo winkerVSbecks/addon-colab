@@ -103,6 +103,7 @@ export interface StrokeSummary {
   color: string;
   width: number;
   pointCount: number;
+  /** The box around the stroke's points. It leaves out the line width: the drawn line reaches `width / 2` further. */
   bounds: Rect;
   /**
    * Story frames the stroke relates to: `within` (drawn entirely on the frame), `crosses` (partly on
