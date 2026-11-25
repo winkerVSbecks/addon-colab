@@ -57,7 +57,7 @@ describe('canvas indexer', () => {
       exportName: 'Canvas',
       metaId: 'colab-canvas-design-review',
     });
-    expect(entry!.tags).toEqual([CANVAS_TAG, '!autodocs', '!test']);
+    expect(entry!.tags).toEqual([CANVAS_TAG, '!autodocs', '!test', '!manifest']);
     expect(storybookId(entry!)).toBe('colab-canvas-design-review--canvas');
     expect(storybookId(entry!)).toBe(canvasStoryId('design-review'));
   });

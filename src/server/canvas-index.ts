@@ -91,7 +91,9 @@ export function canvasIndexInput(fileName: string, info: CanvasEntryInfo): Story
     metaId: canvasMetaId(info.fileId),
     title: CANVAS_TITLE,
     name: info.valid ? info.name : `${info.fileId}${FILE_SUFFIX} (invalid)`,
-    tags: [CANVAS_TAG, ...(info.valid ? [] : [INVALID_CANVAS_TAG]), '!autodocs', '!test'],
+    // Canvases are not components: keep them out of docs pages, test runs and the component
+    // manifest that other tools (MCP, docs) read.
+    tags: [CANVAS_TAG, ...(info.valid ? [] : [INVALID_CANVAS_TAG]), '!autodocs', '!test', '!manifest'],
   };
 }
 
