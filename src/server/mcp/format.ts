@@ -61,6 +61,8 @@ export type CommentLocation =
       selector: string;
       role?: string;
       name?: string;
+      /** Text of the element's row, when other elements in the story look the same (each row's "Delete"). */
+      context?: string;
       text: string;
       html: string;
     }
@@ -186,6 +188,7 @@ export function describeAnchor(anchor: Anchor, canvas: CanvasFile, lookup: Story
         selector: target.selector,
         ...(target.role ? { role: target.role } : {}),
         ...(target.name ? { name: target.name } : {}),
+        ...(target.context ? { context: target.context } : {}),
         text: target.text,
         html: target.html,
       };

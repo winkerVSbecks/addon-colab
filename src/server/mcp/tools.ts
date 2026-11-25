@@ -34,7 +34,7 @@ export interface ColabMcpServerOptions {
 
 const INSTRUCTIONS = `This server reads and writes the comment canvases of a running Storybook (storybook-addon-colab).
 A canvas is a board of live story renders ("frames") where people pin comments to DOM elements, whole stories or free positions, and draw freehand strokes.
-Typical flow: list_canvases → list_canvas_comments (status "open") → find the code from each comment's location (storyFile, storyId, selector, html, text, role/name) → fix it → reply_to_canvas_comment to say what changed → resolve_canvas_comment when done.
+Typical flow: list_canvases → list_canvas_comments (status "open") → find the code from each comment's location (storyFile, storyId, selector, html, text, role/name, context) → fix it → reply_to_canvas_comment to say what changed → resolve_canvas_comment when done.
 Coordinates are board pixels at zoom 1. Comments you add are marked as written by the agent and appear on the open canvas immediately.`;
 
 const canvasId = z
@@ -134,7 +134,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
     {
       title: 'List comments',
       description:
-        'Lists comments, oldest first, on one canvas or on all canvases. Each comment includes its location: for an element, the story id, story file (importPath), CSS selector relative to the story root, HTML snippet, text, and role/name, which is enough to find the code; for a frame, the story id and story file; for a position, the frames it lies in. Replies are included.',
+        'Lists comments, oldest first, on one canvas or on all canvases. Each comment includes its location: for an element, the story id, story file (importPath), CSS selector relative to the story root, HTML snippet, text, role/name and, for an element in a repeated row or list, context (the text of its row, which tells it apart from the same button in other rows), which is enough to find the code; for a frame, the story id and story file; for a position, the frames it lies in. Replies are included.',
       inputSchema: {
         canvasId: canvasId.optional().describe('Only this canvas. Omit for all canvases.'),
         status: commentStatusSchema.optional().describe('"open" or "resolved". Omit for both.'),

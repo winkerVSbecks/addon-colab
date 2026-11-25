@@ -67,7 +67,7 @@ export function pinOffsetInFrame(element: Element, frame: HTMLElement, worldWidt
   return { kind: 'offset', offset: { x: Math.max(0, x), y } };
 }
 
-/** Resolves an element target inside its frame (selector, then role + name), as a pin offset. */
+/** Resolves an element target inside its frame (`resolveTarget`), as a pin offset. */
 export function resolveElementOffset(
   doc: Document,
   frameId: string,

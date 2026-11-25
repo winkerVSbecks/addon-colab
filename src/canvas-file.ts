@@ -51,6 +51,11 @@ export const elementTargetSchema = z.object({
   role: z.string().min(1).optional(),
   /** Accessible name, when one can be computed. */
   name: z.string().min(1).optional(),
+  /**
+   * Text of the element's row (list item, table row, card) when other elements in the story look
+   * the same, such as each row's "Delete" button; tells them apart. Absent otherwise.
+   */
+  context: z.string().min(1).max(300).optional(),
 });
 
 /**

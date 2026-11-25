@@ -15,9 +15,10 @@
  * 7. a structural path (`tag:nth-of-type(n)` steps), as short as it can be while unique, anchored
  *    at the root with `:scope >` only when it has to be.
  *
- * Role and accessible name are stored next to the selector, so when a story re-renders and the
- * selector no longer matches, `resolveTarget` finds the element again by role and name; if that
- * fails too the pin falls back to its frame and is shown as detached.
+ * Role, accessible name, text and (for look-alikes in repeated rows) the row's text are stored next
+ * to the selector. `resolveTarget` only accepts an element that shows it is the same one; when the
+ * selector's element does not, it searches the story for the one that does, and otherwise the pin
+ * falls back to its frame and is shown as detached. A wrong element is worse than a detached pin.
  *
  * Works on any DOM (the preview page, or happy-dom in tests). No React.
  */
@@ -454,7 +455,7 @@ export function pickTarget(hit: Element, root: Element, { exact = false } = {}):
 }
 
 // ---------------------------------------------------------------------------------------------
-// Describing and finding again
+// Snippets
 
 /** A short HTML snippet of the element: its outer HTML, cut down to fit the contract's 2000 chars. */
 export function htmlSnippet(element: Element, max = MAX_TEXT): string {
@@ -468,7 +469,87 @@ export function htmlSnippet(element: Element, max = MAX_TEXT): string {
   return `${open}${element.innerHTML.slice(0, room)}…${close}`;
 }
 
-/** Everything a comment stores about an element (`ElementTarget`). */
+// ---------------------------------------------------------------------------------------------
+// Identity: is this the same element?
+
+/** What a target stores about an element's identity (the rest of `ElementTarget` is about its story). */
+export type TargetIdentity = Pick<ElementTarget, 'selector' | 'html' | 'text' | 'role' | 'name' | 'context'>;
+
+const MAX_CONTEXT = 300;
+
+/** The tag of an HTML snippet's root element (`<button class…>` → `button`). */
+function snippetTag(html: string): string | undefined {
+  return /^<([a-zA-Z][\w:-]*)/.exec(html)?.[1]?.toLowerCase();
+}
+
+/** The opening tag of an HTML snippet. */
+function openingTag(html: string): string {
+  const end = html.indexOf('>');
+  return end === -1 ? html : html.slice(0, end + 1);
+}
+
+/**
+ * Whether `element` has the stored identity: the same role, and the same accessible name; without
+ * a name, the same tag and text; without text either, the same opening tag. The repeat context is
+ * not part of this (see `repeatContext`).
+ */
+export function hasIdentity(element: Element, target: Omit<TargetIdentity, 'selector'>): boolean {
+  if (target.role && roleOf(element) !== target.role) return false;
+  if (target.name) return accessibleName(element) === target.name;
+  const tag = snippetTag(target.html);
+  if (tag && element.tagName.toLowerCase() !== tag) return false;
+  if (target.text) return clip(collapsedText(element), MAX_TEXT) === target.text;
+  return openingTag(element.outerHTML) === openingTag(target.html);
+}
+
+/** Text content with a space between text nodes (`<span>Row C</span><button>Delete</button>` → `Row C Delete`). */
+function spacedText(element: Element): string {
+  const parts: string[] = [];
+  const walker = element.ownerDocument.createTreeWalker(element, 4 /* NodeFilter.SHOW_TEXT */);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) parts.push(node.nodeValue ?? '');
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Text that tells an element in a repeated row or list item apart from its look-alikes (the
+ * "Delete" button of each row): the text of the nearest ancestor that has a sibling with the same
+ * tag (the row, list item or card) and says more than the element itself.
+ */
+export function repeatContext(element: Element, root: Element): string | undefined {
+  const own = spacedText(element);
+  for (let ancestor = element.parentElement; ancestor && ancestor !== root; ancestor = ancestor.parentElement) {
+    const parent = ancestor.parentElement;
+    if (!parent) break;
+    const repeated = [...parent.children].some((child) => child !== ancestor && child.tagName === ancestor.tagName);
+    if (!repeated) continue;
+    const text = spacedText(ancestor);
+    if (text && text !== own) return clip(text, MAX_CONTEXT);
+  }
+  return undefined;
+}
+
+function elementsWithIdentity(root: Element, target: Omit<TargetIdentity, 'selector'>): Element[] {
+  return [...root.querySelectorAll('*')].filter((element) => hasIdentity(element, target));
+}
+
+const TEST_ID_SELECTOR = new RegExp(
+  `^\\[(?:${TEST_ID_ATTRIBUTES.join('|')})=(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*')\\]$`,
+);
+const ID_SELECTOR = /^#(?:[\w\u0080-\uffff-]|\\[0-9a-f]{1,6} ?|\\.)+$/i;
+
+/** Whether a selector is a test id or a hand-written id on its own: it names one element on purpose. */
+export function isIdentitySelector(selector: string): boolean {
+  return TEST_ID_SELECTOR.test(selector) || ID_SELECTOR.test(selector);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Describing and finding again
+
+/**
+ * Everything a comment stores about an element (`ElementTarget`). When other elements in the story
+ * look the same (same role, name or text, like each row's "Delete"), `context` holds the text of
+ * its row so it can be told apart later.
+ */
 export function describeElement(element: Element, root: Element, story: TargetStory): ElementTarget {
   const target: ElementTarget = {
     storyId: story.storyId,
@@ -482,40 +563,50 @@ export function describeElement(element: Element, root: Element, story: TargetSt
   if (role) target.role = role;
   const name = accessibleName(element);
   if (name) target.name = name;
+  if (elementsWithIdentity(root, target).length > 1) {
+    const context = repeatContext(element, root);
+    if (context) target.context = context;
+  }
   return target;
 }
 
-export type ResolvedTarget = { kind: 'found'; element: Element; by: 'selector' | 'role' } | { kind: 'detached' };
+export type ResolvedTarget =
+  | { kind: 'found'; element: Element; by: 'selector' | 'id' | 'search' }
+  | { kind: 'detached' };
 
 /**
- * Finds a target's element in the story root again:
- * 1. by its selector, when the element it matches still has the stored role and name (or none
- *    were stored);
- * 2. else by role and accessible name, when exactly one element has them (a re-render changed the
- *    markup, or the selector now matches a different element, such as "Log out" where "Log in" was);
- * 3. else by the selector alone, when it matches one element (its text was edited, e.g. after the
- *    agent renamed the button);
- * otherwise the target is detached and its pin falls back to the frame.
+ * Finds a target's element in the story root again. A wrong element is worse than none, so the
+ * element must show it is the same one:
+ * - it has the stored identity (`hasIdentity`: role and name, else tag and text);
+ * - when other elements share that identity, it is in the stored row (`context`); without a stored
+ *   context, the selector's position is all there is to go on.
+ *
+ * Order:
+ * 1. the selector's element, when it passes those checks;
+ * 2. a test-id or hand-written-id selector's element even when its name or text changed (the
+ *    author named that element, so a renamed button is still the one the comment is about);
+ * 3. the one element in the story that passes the checks (the markup changed, or a list was
+ *    reordered and the selector's position now holds a different row), when the target has a
+ *    name or text to look for;
+ * otherwise detached: the pin falls back to its frame. So a class or structural selector does not
+ * follow a rename ("Log in" edited to "Sign in" detaches), and "Log in" never moves onto the
+ * "Log out" button that replaced it.
  */
-export function resolveTarget(
-  root: Element,
-  target: Pick<ElementTarget, 'selector' | 'role' | 'name'>,
-): ResolvedTarget {
+export function resolveTarget(root: Element, target: TargetIdentity): ResolvedTarget {
   const bySelector = queryUnique(root, target.selector);
-  const hasIdentity = !!(target.role && target.name);
-  if (
-    bySelector &&
-    (!hasIdentity || (roleOf(bySelector) === target.role && accessibleName(bySelector) === target.name))
-  ) {
+  const lookAlikes = elementsWithIdentity(root, target);
+  const inRow = (element: Element) =>
+    target.context === undefined || lookAlikes.length <= 1 || repeatContext(element, root) === target.context;
+
+  if (bySelector && lookAlikes.includes(bySelector) && inRow(bySelector)) {
     return { kind: 'found', element: bySelector, by: 'selector' };
   }
-  if (hasIdentity) {
-    const matches = [...root.querySelectorAll('*')].filter(
-      (element) => roleOf(element) === target.role && accessibleName(element) === target.name,
-    );
-    const [only] = matches;
-    if (only && matches.length === 1) return { kind: 'found', element: only, by: 'role' };
-  }
-  if (bySelector) return { kind: 'found', element: bySelector, by: 'selector' };
+  if (bySelector && isIdentitySelector(target.selector)) return { kind: 'found', element: bySelector, by: 'id' };
+
+  // With neither a name nor text, look-alikes elsewhere are no evidence: only the selector's position counts.
+  if (!target.name && !target.text) return { kind: 'detached' };
+  const candidates = target.context === undefined ? lookAlikes : lookAlikes.filter(inRow);
+  const [only] = candidates;
+  if (only && candidates.length === 1) return { kind: 'found', element: only, by: 'search' };
   return { kind: 'detached' };
 }

@@ -300,42 +300,124 @@ describe('describeElement', () => {
   });
 });
 
+const STORY = { storyId: 's', title: 't', importPath: './a.ts' };
+
+/** Pins `element` the way comment mode does, so tests resolve what a real comment stores. */
+function pin(root: Element, element: Element) {
+  return describeElement(element, root, STORY);
+}
+
+/** The Page story's header buttons, logged out or in (src/stories/Header.tsx). */
+function headerButtons(user: boolean) {
+  return user
+    ? `<div><span class="welcome">Welcome, <b>Jane Doe</b>!</span><button type="button" class="storybook-button storybook-button--small storybook-button--secondary">Log out</button></div>`
+    : `<div><button type="button" class="storybook-button storybook-button--small storybook-button--secondary">Log in</button><button type="button" class="storybook-button storybook-button--small storybook-button--primary">Sign up</button></div>`;
+}
+
+const rows = (names: string[]) =>
+  `<ul class="rows">${names.map((name) => `<li><span>${name}</span><button>Delete</button></li>`).join('')}</ul>`;
+
 describe('resolveTarget', () => {
   it('finds the element by selector', () => {
     const root = story(HEADER);
-    const result = resolveTarget(root, { selector: 'button.storybook-button--secondary' });
-    expect(result).toEqual({ kind: 'found', element: q(root, '.storybook-button--secondary'), by: 'selector' });
+    const login = q(root, '.storybook-button--secondary');
+    expect(resolveTarget(root, pin(root, login))).toEqual({ kind: 'found', element: login, by: 'selector' });
   });
 
   it('finds it by role and name after a re-render changed its classes', () => {
     const root = story(HEADER);
+    const target = pin(root, q(root, '.storybook-button--secondary'));
     q(root, '.storybook-button--secondary').className = 'storybook-button storybook-button--large';
-    const result = resolveTarget(root, {
-      selector: 'button.storybook-button--secondary',
-      role: 'button',
-      name: 'Log in',
-    });
-    expect(result.kind === 'found' && result.by).toBe('role');
-  });
-
-  it('prefers the element with the stored role and name when the selector now matches another one', () => {
-    // Page story after logging in: "Log in" became "Log out" with the same classes.
-    const root = story(`<button class="btn btn--secondary">Log out</button><div><button>Log in</button></div>`);
-    const result = resolveTarget(root, { selector: 'button.btn--secondary', role: 'button', name: 'Log in' });
+    const result = resolveTarget(root, target);
+    expect(result.kind === 'found' && result.by).toBe('search');
     expect(result.kind === 'found' && result.element.textContent).toBe('Log in');
   });
 
-  it('keeps the selector match when the text was edited and nothing else has the old name', () => {
-    const root = story(`<button class="cta">Sign in</button>`);
-    const result = resolveTarget(root, { selector: 'button.cta', role: 'button', name: 'Log in' });
-    expect(result).toEqual({ kind: 'found', element: q(root, 'button'), by: 'selector' });
+  it('detaches "Log in" after logging in, instead of moving onto "Log out", and comes back after logging out', () => {
+    const root = story(headerButtons(false));
+    const target = pin(root, q(root, '.storybook-button--secondary'));
+    expect(target.selector).toBe('button.storybook-button--secondary');
+    root.innerHTML = headerButtons(true);
+    expect(queryUnique(root, target.selector)?.textContent).toBe('Log out');
+    expect(resolveTarget(root, target)).toEqual({ kind: 'detached' });
+    root.innerHTML = headerButtons(false);
+    expect(resolveTarget(root, target)).toMatchObject({ kind: 'found', by: 'selector' });
   });
 
-  it('is detached when the element is gone or the role and name are ambiguous', () => {
+  it('detaches a class-selected button whose text was edited (a rename is not proof it is the same button)', () => {
+    const root = story(`<button class="cta">Log in</button>`);
+    const target = pin(root, q(root, 'button'));
+    q(root, 'button').textContent = 'Sign in';
+    expect(resolveTarget(root, target)).toEqual({ kind: 'detached' });
+  });
+
+  it('follows a rename when the selector is a test id or a hand-written id', () => {
+    const root = story(`<button data-testid="login" class="cta">Log in</button><a id="help" href="/h">Help</a>`);
+    const byTestId = pin(root, q(root, 'button'));
+    const byId = pin(root, q(root, 'a'));
+    expect(byTestId.selector).toBe('[data-testid="login"]');
+    expect(byId.selector).toBe('#help');
+    q(root, 'button').textContent = 'Sign in';
+    q(root, 'a').textContent = 'Support';
+    expect(resolveTarget(root, byTestId)).toEqual({ kind: 'found', element: q(root, 'button'), by: 'id' });
+    expect(resolveTarget(root, byId)).toEqual({ kind: 'found', element: q(root, 'a'), by: 'id' });
+  });
+
+  it('follows a row by its text when a row is prepended (structural selector, no role or name)', () => {
+    const root = story(rows(['Row A', 'Row B', 'Row C']));
+    const target = pin(root, q(root, 'li:nth-of-type(3) > span'));
+    expect(target.selector).toContain('nth-of-type(3)');
+    q(root, 'ul').insertAdjacentHTML('afterbegin', '<li><span>Row 0</span><button>Delete</button></li>');
+    const result = resolveTarget(root, target);
+    expect(result.kind === 'found' && result.element.textContent).toBe('Row C');
+  });
+
+  it("stores the row's text for a button every row has, and follows that row when one is prepended", () => {
+    const root = story(rows(['Row A', 'Row B', 'Row C']));
+    const target = pin(root, q(root, 'li:nth-of-type(3) > button'));
+    expect(target.name).toBe('Delete');
+    expect(target.context).toBe('Row C Delete');
+    expect(elementTargetSchema.safeParse(target).success).toBe(true);
+    q(root, 'ul').insertAdjacentHTML('afterbegin', '<li><span>Row 0</span><button>Delete</button></li>');
+    const result = resolveTarget(root, target);
+    expect(result.kind).toBe('found');
+    expect(result.kind === 'found' && result.element.parentElement?.textContent).toBe('Row CDelete');
+  });
+
+  it('follows a keyed reorder and detaches when the row is removed', () => {
+    const root = story(rows(['Row A', 'Row B', 'Row C']));
+    const span = pin(root, q(root, 'li:nth-of-type(1) > span'));
+    const button = pin(root, q(root, 'li:nth-of-type(1) > button'));
+    const ul = q(root, 'ul');
+    ul.append(ul.firstElementChild as Element); // B, C, A
+    for (const target of [span, button]) {
+      const result = resolveTarget(root, target);
+      expect(result.kind === 'found' && result.element.closest('li')?.querySelector('span')?.textContent).toBe('Row A');
+    }
+    ul.lastElementChild?.remove();
+    expect(resolveTarget(root, span)).toEqual({ kind: 'detached' });
+    expect(resolveTarget(root, button)).toEqual({ kind: 'detached' });
+  });
+
+  it('does not store context for an element that is unique', () => {
+    const root = story(HEADER);
+    expect(pin(root, q(root, '.storybook-button--secondary')).context).toBeUndefined();
+  });
+
+  it('is detached when the element is gone or look-alikes leave no way to tell which', () => {
     const root = story(`<button>Go</button><button>Go</button>`);
-    expect(resolveTarget(root, { selector: '#missing', role: 'button', name: 'Go' })).toEqual({ kind: 'detached' });
-    expect(resolveTarget(root, { selector: 'button', role: 'button', name: 'Go' })).toEqual({ kind: 'detached' });
-    expect(resolveTarget(root, { selector: '#missing' })).toEqual({ kind: 'detached' });
-    expect(resolveTarget(root, { selector: '[[invalid' })).toEqual({ kind: 'detached' });
+    const base = { html: '<button>Go</button>', text: 'Go', role: 'button', name: 'Go' };
+    expect(resolveTarget(root, { ...base, selector: '#missing' })).toEqual({ kind: 'detached' });
+    expect(resolveTarget(root, { ...base, selector: 'button' })).toEqual({ kind: 'detached' });
+    expect(resolveTarget(root, { selector: '#missing', html: '<i></i>', text: '' })).toEqual({ kind: 'detached' });
+    expect(resolveTarget(root, { selector: '[[invalid', html: '<i></i>', text: '' })).toEqual({ kind: 'detached' });
+  });
+
+  it('checks the opening tag of an element with no name and no text', () => {
+    const root = story(`<div class="a"><i class="dot"></i></div><div class="b"><i class="dot"></i></div>`);
+    const target = pin(root, q(root, '.b > i'));
+    expect(resolveTarget(root, target).kind).toBe('found');
+    q(root, '.b > i').className = 'square';
+    expect(resolveTarget(root, target)).toEqual({ kind: 'detached' });
   });
 });
