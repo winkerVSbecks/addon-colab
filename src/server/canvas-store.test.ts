@@ -456,6 +456,27 @@ describe('strokes', () => {
     const back = await store.restoreStrokes({ canvasId: 'board', strokes: cleared.strokes, index: 0 });
     expect(back.canvas.strokes).toEqual([a, b]);
   });
+
+  it('removes several strokes in one write and returns the removed ones', async () => {
+    await store.create({ name: 'Board' });
+    const add = async (x: number) =>
+      (await store.addStroke({ canvasId: 'board', stroke: { color: '#f00', width: 2, points: [[x, x]] } })).stroke;
+    const [a, b, c] = [await add(0), await add(1), await add(2)];
+    const writes: string[] = [];
+    const unsubscribe = store.subscribe((event) => writes.push(event.type));
+    const removed = await store.removeStrokes({ canvasId: 'board', strokeIds: [c.id, a.id, 'stroke-gone', a.id] });
+    unsubscribe();
+    expect(writes).toEqual(['changed']);
+    expect(removed.strokes).toEqual([a, c]);
+    expect(removed.canvas.strokes).toEqual([b]);
+
+    const none = await store.removeStrokes({ canvasId: 'board', strokeIds: [a.id] });
+    expect(none.strokes).toEqual([]);
+    expect(none.canvas.updatedAt).toBe(removed.canvas.updatedAt);
+
+    await expectStoreError(store.removeStrokes({ canvasId: 'board', strokeIds: [1] as never }), 'INVALID_INPUT');
+    await expectStoreError(store.removeStrokes({ canvasId: 'nope', strokeIds: [a.id] }), 'NOT_FOUND');
+  });
 });
 
 describe('invalid files', () => {

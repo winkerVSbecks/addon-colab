@@ -589,6 +589,19 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
       return { canvas };
     },
 
+    async removeStrokes({ canvasId, strokeIds }) {
+      const ids = new Set(parseInput(z.array(z.string()), strokeIds, 'strokeIds'));
+      assertCanvasId(canvasId);
+      // None of them on the canvas (erased elsewhere): answer without a write.
+      const existing = (await load(canvasId)).canvas;
+      if (!existing.strokes.some((s) => ids.has(s.id))) return { canvas: existing, strokes: [] };
+      const { canvas, result } = await mutate(canvasId, (current) => ({
+        canvas: { ...current, strokes: current.strokes.filter((s) => !ids.has(s.id)) },
+        result: current.strokes.filter((s) => ids.has(s.id)),
+      }));
+      return { canvas, strokes: result };
+    },
+
     async restoreStrokes({ canvasId, strokes, index }) {
       const input = parseInput(z.array(strokeSchema), strokes, 'strokes');
       const at = index === undefined ? undefined : parseInput(z.number().int().min(0), index, 'index');

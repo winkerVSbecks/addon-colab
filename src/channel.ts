@@ -118,6 +118,11 @@ export interface CanvasOperations {
   addStroke: { args: { canvasId: string; stroke: StrokeInput }; result: { canvas: CanvasFile; stroke: Stroke } };
   removeStroke: { args: { canvasId: string; strokeId: string }; result: { canvas: CanvasFile } };
   /**
+   * Removes several strokes in one write (an eraser swipe). Ids not on the canvas are skipped;
+   * `strokes` in the result are the removed ones, in drawing order. No write when none are present.
+   */
+  removeStrokes: { args: { canvasId: string; strokeIds: string[] }; result: { canvas: CanvasFile; strokes: Stroke[] } };
+  /**
    * Puts removed strokes back with their ids (undo of `removeStroke` / `clearStrokes`, redo of
    * `addStroke`), inserted together at `index` in the drawing order (clamped; the end when absent).
    * Strokes whose id is already on the canvas are skipped, so a repeated undo is harmless;
@@ -154,6 +159,7 @@ export const CANVAS_OPERATIONS = [
   'restoreComment',
   'addStroke',
   'removeStroke',
+  'removeStrokes',
   'restoreStrokes',
   'clearStrokes',
 ] as const satisfies readonly CanvasOperation[];
