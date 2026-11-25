@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Stroke } from '../canvas-file';
 import {
   NO_STROKE_EDITS,
+  contiguousRuns,
   settleStrokeEdits,
   visibleStrokes,
   withAdded,
@@ -73,5 +74,21 @@ describe('stroke edits', () => {
     edits = withRemoved(NO_STROKE_EDITS, ['stroke-a']);
     edits = withAdded(edits, a);
     expect(ids(visibleStrokes([], edits))).toEqual(['stroke-a']);
+  });
+});
+
+describe('contiguousRuns', () => {
+  it('puts neighbouring strokes back in one write, in index order', () => {
+    const c = stroke('stroke-c');
+    const runs = contiguousRuns([
+      { stroke: c, index: 5 },
+      { stroke: a, index: 0 },
+      { stroke: b, index: 1 },
+    ]);
+    expect(runs.map((run) => ({ index: run.index, ids: ids(run.strokes) }))).toEqual([
+      { index: 0, ids: ['stroke-a', 'stroke-b'] },
+      { index: 5, ids: ['stroke-c'] },
+    ]);
+    expect(contiguousRuns([])).toEqual([]);
   });
 });

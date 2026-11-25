@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   NO_STROKE_EDITS,
+  contiguousRuns,
   type StrokeEdits,
   settleStrokeEdits,
   visibleStrokes,
@@ -42,17 +43,6 @@ export interface StrokesApi {
 }
 
 let localIds = 0;
-
-/** Groups strokes to put back into runs of consecutive indices, in index order. */
-export function contiguousRuns(entries: readonly { stroke: Stroke; index: number }[]) {
-  const runs: { index: number; strokes: Stroke[] }[] = [];
-  for (const { stroke, index } of [...entries].sort((a, b) => a.index - b.index)) {
-    const last = runs[runs.length - 1];
-    if (last && index === last.index + last.strokes.length) last.strokes.push(stroke);
-    else runs.push({ index, strokes: [stroke] });
-  }
-  return runs;
-}
 
 export function useStrokes(
   canvas: CanvasFile,
