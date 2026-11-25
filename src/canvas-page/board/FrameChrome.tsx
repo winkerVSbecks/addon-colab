@@ -43,6 +43,12 @@ export interface FrameChromeProps {
 }
 
 const TITLE_HEIGHT = 24;
+/**
+ * The title is the frame's only move/select/delete handle, so it never gets narrower than this,
+ * even when a small frame at low zoom (plus the selected frame's buttons) leaves less room: the
+ * title bar then runs past the frame's right edge.
+ */
+export const TITLE_MIN_WIDTH = 56;
 /** A press that moves less than this is a click, not a drag. */
 const DRAG_THRESHOLD = 3;
 
@@ -79,7 +85,7 @@ const Title = styled.button(({ theme }) => ({
   pointerEvents: 'auto',
   boxSizing: 'border-box',
   flex: '0 1 auto',
-  minWidth: 0,
+  minWidth: TITLE_MIN_WIDTH,
   height: 20,
   padding: '0 4px',
   borderRadius: theme.appBorderRadius,

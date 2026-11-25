@@ -55,6 +55,22 @@ export function withMinimumSize<F extends Pick<Frame, 'width' | 'height'>>(frame
   return next;
 }
 
+/**
+ * The frame to put back when a removal is undone: the frame as shown (its place, and any size the
+ * user gave it), but with the file's own size when the shown size is only the file's size with the
+ * minimums applied. An undersized frame from a hand edit comes back exactly as it was in the file.
+ */
+export function frameToRestore(shown: Frame, file: Frame | undefined): Frame {
+  if (!file || file.id !== shown.id) return shown;
+  const minimum = withMinimumSize(file);
+  if (minimum.width !== shown.width || minimum.height !== shown.height) return shown;
+  if (file.width === shown.width && file.height === shown.height) return shown;
+  const restored: Frame = { ...shown, width: file.width };
+  if (file.height === undefined) delete restored.height;
+  else restored.height = file.height;
+  return restored;
+}
+
 /** Store coordinates are whole CSS pixels; keeps files tidy and diffs small. */
 export function roundPoint(point: Point): Point {
   return { x: Math.round(point.x), y: Math.round(point.y) };

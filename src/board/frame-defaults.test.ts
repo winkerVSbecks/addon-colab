@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  frameToRestore,
   withMinimumSize,
   ASSUMED_FRAME_HEIGHT,
   FRAME_GAP,
@@ -69,5 +70,24 @@ describe('withMinimumSize', () => {
     expect(withMinimumSize(frame)).toBe(frame);
     const large = { width: 8000, height: 5000 };
     expect(withMinimumSize(large)).toBe(large);
+  });
+});
+
+describe('frameToRestore', () => {
+  const file = { id: 'f1', storyId: 's--a', x: 10, y: 20, width: 30, height: 10 };
+  const shown = { ...file, width: 120, height: 40 };
+
+  it("puts back the file's own size when the shown size only applied the minimums", () => {
+    expect(frameToRestore(shown, file)).toEqual(file);
+    const auto = { id: 'f1', storyId: 's--a', x: 10, y: 20, width: 30 };
+    expect(frameToRestore({ ...auto, width: 120 }, auto)).toEqual(auto);
+  });
+
+  it('keeps the shown frame when the user gave it another size or place, or the file has none', () => {
+    expect(frameToRestore({ ...shown, width: 200 }, file)).toEqual({ ...shown, width: 200 });
+    expect(frameToRestore({ ...shown, x: 99 }, file)).toEqual({ ...file, x: 99 });
+    expect(frameToRestore(shown, undefined)).toBe(shown);
+    const normal = { ...file, width: 300, height: 200 };
+    expect(frameToRestore(normal, normal)).toBe(normal);
   });
 });

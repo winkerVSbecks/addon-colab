@@ -14,7 +14,7 @@ import { inStableOrder, isOnTop, raiseSettled, withRaised } from '../board/frame
 import { boardKeyAction, focusPlace } from '../board/keyboard';
 import { BOARD_MODES, type BoardMode } from '../board/modes';
 import type { UndoEntry } from '../board/undo-stack';
-import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect } from '../board/frame-defaults';
+import { MIN_FRAME_HEIGHT, MIN_FRAME_WIDTH, clampFrameSize, frameRect, frameToRestore } from '../board/frame-defaults';
 import { type StoryTitle, storyTitle, storyTitleFromId } from '../board/story-title';
 import { pinBounds } from '../board/comment-pins';
 import { boundsOf, worldRectToScreen } from '../board/viewport';
@@ -275,8 +275,13 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   const editsRestore = edits.restore;
   const remove = useCallback(
     (frameId: string) => {
-      const frame = framesRef.current.find((f) => f.id === frameId);
-      if (!frame) return;
+      const shown = framesRef.current.find((f) => f.id === frameId);
+      if (!shown) return;
+      // As shown, but an undersized frame from the file comes back with the file's size.
+      const frame = frameToRestore(
+        shown,
+        fileRef.current.frames.find((f) => f.id === frameId),
+      );
       // Its place in the order as shown (a frame selected by its title has just come to the front).
       const index = framesRef.current.findIndex((f) => f.id === frameId);
       const name = titlesRef.current.get(frameId)?.short ?? storyTitleFromId(frame.storyId).short;
