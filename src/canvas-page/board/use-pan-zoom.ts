@@ -2,28 +2,16 @@
  * Pointer and wheel input that moves the board's viewport:
  * - trackpad scroll / mouse wheel pans; shift+wheel pans sideways with a plain mouse wheel;
  * - pinch (Chrome reports it as ctrl+wheel) and ctrl/⌘+wheel zoom around the pointer;
- * - dragging the empty background, the middle button anywhere, or any drag while Space is held pans.
+ * - dragging the empty background, the middle button anywhere, or any drag while Space is held pans
+ *   (Space only counts while focus is on the board itself, see `src/board/keyboard.ts`).
  *
  * Everything else reaches the stories untouched, so they stay interactive.
  */
 import { type RefObject, useEffect, useRef, useState } from 'react';
 
+import { focusPlace, spaceStartsPan } from '../../board/keyboard';
 import { type Point, wheelDeltaToPixels, wheelZoomFactor, zoomAt } from '../../board/viewport';
 import type { BoardView } from './use-board-view';
-
-/** Whether keyboard input should go to this element (text entry) rather than to board shortcuts. */
-export function isEditable(element: Element | null): boolean {
-  if (!element) return false;
-  const html = element as HTMLElement;
-  if (html.isContentEditable) return true;
-  if (element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) return true;
-  if (element instanceof HTMLInputElement) {
-    return !['button', 'checkbox', 'color', 'file', 'image', 'radio', 'range', 'reset', 'submit'].includes(
-      element.type,
-    );
-  }
-  return false;
-}
 
 export interface PanZoomOptions {
   root: RefObject<HTMLElement | null>;
@@ -69,7 +57,9 @@ export function usePanZoom({ root, surface, board, onBackgroundPress }: PanZoomO
   // Space held: the next drag pans, wherever it starts.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || isEditable(document.activeElement)) return;
+      // Space belongs to whatever has focus (a button in a story, say) unless that is the board.
+      if (event.code !== 'Space' || event.defaultPrevented) return;
+      if (!spaceStartsPan(focusPlace(document.activeElement))) return;
       event.preventDefault();
       if (!event.repeat) setSpaceHeld(true);
     };

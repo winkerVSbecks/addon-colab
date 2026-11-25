@@ -3,7 +3,8 @@
 // dependency of the addon; install it once with
 //   mkdir -p spike/.tools && cd spike/.tools && echo '{"private":true}' > package.json && npm i playwright-core
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(fileURLToPath(new URL('../spike/.tools/package.json', import.meta.url)));
 export const { chromium } = require('playwright-core');
@@ -102,8 +103,13 @@ export async function setView(page, canvasId, view) {
   );
 }
 
-/** The test canvas the checks use: `.sb-task6/canvases/board.json` with three example stories. */
-export const CANVAS_FILE = new URL('../.sb-task6/canvases/board.json', import.meta.url);
+/**
+ * The test canvas the checks use: `board.json` with three example stories, in `$CANVAS_DIR` (the
+ * canvas folder of the Storybook on `$SB`), `.sb-task6/canvases` by default.
+ */
+export const CANVAS_FILE = process.env.CANVAS_DIR
+  ? pathToFileURL(resolve(process.env.CANVAS_DIR, 'board.json'))
+  : new URL('../.sb-task6/canvases/board.json', import.meta.url);
 export const BASE_CANVAS = {
   schemaVersion: 1,
   id: 'board',

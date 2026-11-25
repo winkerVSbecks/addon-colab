@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { type FocusElement, boardKeyAction, focusPlace, isTextEntry, titleKeyAction } from './keyboard';
+import { type FocusElement, boardKeyAction, focusPlace, isTextEntry, spaceStartsPan, titleKeyAction } from './keyboard';
 
 /**
  * A stand-in element. `inside` lists the attribute selectors it (or an ancestor) matches; `own`
@@ -94,5 +94,24 @@ describe('title keys', () => {
     expect(titleKeyAction({ key: 'Enter' })).toEqual({ type: 'select' });
     expect(titleKeyAction({ key: ' ' })).toEqual({ type: 'select' });
     expect(titleKeyAction({ key: 'a' })).toBeNull();
+  });
+});
+
+describe('Space', () => {
+  it('pans only when focus is on the board itself', () => {
+    expect(spaceStartsPan(focusPlace(board))).toBe(true);
+    expect(spaceStartsPan(focusPlace(null))).toBe(true);
+  });
+
+  it('reaches buttons and other controls inside stories', () => {
+    expect(spaceStartsPan(focusPlace(storyButton))).toBe(false);
+    expect(spaceStartsPan(focusPlace(el('INPUT', { type: 'checkbox', inside: ['[data-colab-frame]'] })))).toBe(false);
+    expect(spaceStartsPan(focusPlace(el('A', { inside: ['[data-colab-frame]'] })))).toBe(false);
+    expect(spaceStartsPan(focusPlace(storyInput))).toBe(false);
+  });
+
+  it("reaches the board's own controls", () => {
+    expect(spaceStartsPan(focusPlace(title))).toBe(false);
+    expect(spaceStartsPan(focusPlace(toolbarButton))).toBe(false);
   });
 });

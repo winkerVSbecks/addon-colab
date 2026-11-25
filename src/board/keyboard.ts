@@ -102,3 +102,12 @@ export function titleKeyAction(event: KeyLike & { shiftKey?: boolean }): TitleKe
       return null;
   }
 }
+
+/**
+ * Whether holding Space starts panning. Only when focus is on the board itself (or nowhere):
+ * anywhere else Space belongs to the focused element, such as a button or checkbox in a story, a
+ * frame's title or a toolbar button.
+ */
+export function spaceStartsPan(place: FocusPlace): boolean {
+  return place === 'board' || place === 'none';
+}
