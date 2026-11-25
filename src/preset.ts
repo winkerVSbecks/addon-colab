@@ -5,6 +5,7 @@ import type { Options } from 'storybook/internal/types';
 
 import type { ChannelLike } from './channel';
 import { registerCanvasChannel } from './server/canvas-channel';
+import { canvasEntryPresets } from './server/canvas-index';
 import { getCanvasStore } from './server/canvas-store';
 import { type DevServerApp, registerColabMcp } from './server/mcp/dev-server';
 
@@ -48,3 +49,8 @@ export const experimental_devServer = async <A extends DevServerApp>(
   await registerColabMcp(app, options, { dir: canvasDirFor(options) });
   return app;
 };
+
+// Canvases as sidebar entries (task 5): one "Canvases" entry per canvas file, dev server only.
+export const { stories, experimental_indexers, viteFinal } = canvasEntryPresets<Options & ColabAddonOptions>(
+  canvasDirFor,
+);
