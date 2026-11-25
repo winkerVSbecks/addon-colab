@@ -334,6 +334,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
               onElement={onElement}
               onMeasure={onMeasure}
               onStatus={onStatus}
+              onRemove={remove}
               refreshKey={refreshKey}
             />
           ))}

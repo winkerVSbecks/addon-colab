@@ -39,6 +39,8 @@ export function getPreview(): PreviewLike | undefined {
 
 export type StoryStatus =
   | { kind: 'loading' }
+  /** The story id is not in this Storybook (the story was renamed or deleted). */
+  | { kind: 'missing' }
   | { kind: 'ready'; story: PreparedStoryLike }
   | { kind: 'error'; title: string; message: string; story?: PreparedStoryLike };
 
@@ -54,10 +56,23 @@ function messageOf(error: unknown): string {
 }
 
 /**
+ * Whether `loadStory` failed because the story id is not in the index. Storybook throws its
+ * `MissingStoryAfterHmrError` ("Couldn't find story matching id … after HMR"); errors from another
+ * copy of the class are recognised by name, so no import of Storybook's error classes is needed.
+ */
+export function isMissingStoryError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const { name, message } = error as { name?: unknown; message?: unknown };
+  if (typeof name === 'string' && name.includes('MissingStory')) return true;
+  return typeof message === 'string' && /couldn't find story/i.test(message);
+}
+
+/**
  * Mounts `storyId` into `element` and reports its status. The story runs as in Storybook's canvas
  * (play functions included). `refresh` reloads the story and re-renders only when the prepared story
  * is a new object, which happens when its CSF file was hot-reloaded; component edits are picked up
- * by React Fast Refresh without this.
+ * by React Fast Refresh without this. A story that is not in the index is reported as `missing`
+ * (also when it disappears later: its render is torn down), and mounts if a refresh finds it again.
  */
 export function mountStory(
   preview: PreviewLike,
@@ -76,11 +91,7 @@ export function mountStory(
   };
 
   const render = async (story: PreparedStoryLike) => {
-    if (teardownRender) {
-      const previous = teardownRender;
-      teardownRender = undefined;
-      await previous().catch(() => undefined);
-    }
+    await unrender();
     if (disposed) return;
     current = story;
     onStatus({ kind: 'ready', story });
@@ -97,13 +108,27 @@ export function mountStory(
     );
   };
 
+  const unrender = async () => {
+    const previous = teardownRender;
+    teardownRender = undefined;
+    await previous?.().catch(() => undefined);
+  };
+
   const load = async (initial: boolean) => {
     if (disposed) return;
     let story: PreparedStoryLike;
     try {
       story = await preview.loadStory({ storyId });
     } catch (error) {
-      if (initial) onStatus({ kind: 'error', title: `Couldn't load ${storyId}`, message: messageOf(error) });
+      if (disposed) return;
+      if (isMissingStoryError(error)) {
+        await unrender();
+        current = undefined;
+        if (!disposed) onStatus({ kind: 'missing' });
+      } else if (!current) {
+        onStatus({ kind: 'error', title: "This story couldn't be loaded", message: messageOf(error) });
+      }
+      // Otherwise the story is still showing its last good render; keep it.
       return;
     }
     if (disposed || (!initial && story === current)) return;
@@ -117,11 +142,7 @@ export function mountStory(
     refresh: () => enqueue(() => load(false)),
     teardown: () => {
       disposed = true;
-      return enqueue(async () => {
-        const previous = teardownRender;
-        teardownRender = undefined;
-        await previous?.().catch(() => undefined);
-      });
+      return enqueue(unrender);
     },
   };
 }

@@ -6,6 +6,7 @@
  */
 import React, { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
+import { Button } from 'storybook/internal/components';
 import { styled } from 'storybook/theming/emotion';
 
 import { MIN_FRAME_HEIGHT, type StoryLayout, storyLayout } from '../../board/frame-defaults';
@@ -23,6 +24,8 @@ export interface FrameBodyProps {
   /** The rendered height in CSS pixels, whenever it changes. */
   onMeasure: (frameId: string, height: number) => void;
   onStatus: (frameId: string, status: StoryStatus) => void;
+  /** Removes this frame from the canvas (offered when its story no longer exists). */
+  onRemove: (frameId: string) => void;
   /** Bumped by the board after a hot reload, so the story re-renders if its file changed. */
   refreshKey: number;
 }
@@ -76,6 +79,29 @@ const Message = styled.div(({ theme }) => ({
   },
 }));
 
+/** Shown in place of a story that is not in this Storybook any more. Follows the Storybook theme. */
+const Missing = styled.div(({ theme }) => ({
+  flex: '1 0 auto',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: 4,
+  padding: 16,
+  fontFamily: theme.typography.fonts.base,
+  fontSize: theme.typography.size.s2,
+  lineHeight: '20px',
+  color: theme.color.defaultText,
+  background: theme.background.content,
+  '& strong': { fontWeight: theme.typography.weight.bold },
+  '& code': {
+    fontFamily: theme.typography.fonts.mono,
+    fontSize: theme.typography.size.s1,
+    color: theme.textMutedColor,
+    overflowWrap: 'anywhere',
+    marginBottom: 8,
+  },
+}));
+
 function FrameBodyImpl({
   frameId,
   storyId,
@@ -85,6 +111,7 @@ function FrameBodyImpl({
   onElement,
   onMeasure,
   onStatus,
+  onRemove,
   refreshKey,
 }: FrameBodyProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -139,7 +166,16 @@ function FrameBodyImpl({
       data-story-id={storyId}
       style={{ width, minHeight: height ?? MIN_FRAME_HEIGHT }}
     >
-      <StoryRoot ref={storyRef} style={LAYOUT_STYLES[layout]} />
+      <StoryRoot ref={storyRef} style={status.kind === 'missing' ? { display: 'none' } : LAYOUT_STYLES[layout]} />
+      {status.kind === 'missing' && (
+        <Missing data-colab-frame-missing="">
+          <strong>This story no longer exists</strong>
+          <code>{storyId}</code>
+          <Button variant="outline" size="small" ariaLabel={false} onClick={() => onRemove(frameId)}>
+            Remove
+          </Button>
+        </Missing>
+      )}
       {status.kind === 'error' && (
         <Message role="alert">
           <strong>{status.title}</strong>
