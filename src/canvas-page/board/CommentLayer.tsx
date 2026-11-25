@@ -7,6 +7,10 @@
  * - the draft composer and the open thread, in Storybook's `Popover` chrome;
  * - the comment list (`CommentList`).
  *
+ * Stacking, bottom to top (explicit z-indexes, so a story's `button { z-index }` rule cannot lift a
+ * pin over the list): pins (in their own stacking context), the hover highlight, the list, then the
+ * draft composer and the open thread.
+ *
  * All stories share this page, so a story's global CSS reaches these elements. Every element here
  * sets the properties it depends on (font, colour, box model, line height, text transform) on its
  * own class, which beats tag and universal selectors from stories; the layer itself starts from
@@ -21,7 +25,7 @@ import { keyframes, styled } from 'storybook/theming/emotion';
 import { describeAnchor, timeAgo } from '../../board/comment-pins';
 import type { Size } from '../../board/viewport';
 import type { Comment } from '../../canvas-file';
-import { CommentList } from './CommentList';
+import { CommentList, LIST_WIDTH } from './CommentList';
 import { AuthorIcon, authorLabel, box, hardText, storyCssShield } from './comment-ui';
 import type { CommentLayerState, ShownPin } from './use-comments';
 
@@ -32,6 +36,18 @@ export const PIN_SIZE = 28;
 /** Pins on one spot fan out to the right, each still showing most of itself (and clickable). */
 const STACK_STEP = 22;
 const CARD_WIDTH = 320;
+
+/** Stacking inside the layer (see the module comment). */
+export const LAYER_STACK = { pins: 0, hover: 1, list: 2, card: 3 } as const;
+
+/** Pins live in their own stacking context, so no pin (whatever z-index a story gives it) rises above the list. */
+const PinLayer = styled.div({
+  '&&': { position: 'absolute', inset: 0, zIndex: LAYER_STACK.pins, isolation: 'isolate' },
+  all: 'unset',
+  position: 'absolute',
+  inset: 0,
+  pointerEvents: 'none',
+});
 
 const Layer = styled.div({
   all: 'initial',
@@ -48,6 +64,7 @@ const Highlight = styled.div(({ theme }) => ({
   position: 'absolute',
   boxSizing: 'border-box',
   pointerEvents: 'none',
+  '&&': { zIndex: LAYER_STACK.hover },
   outline: `2px solid ${theme.color.secondary}`,
   outlineOffset: 0,
   background: `${theme.color.secondary}14`,
@@ -130,6 +147,7 @@ const ReplyCount = styled.span(({ theme }) => ({
 
 const CardPosition = styled.div({
   ...box,
+  '&&': { zIndex: LAYER_STACK.card },
   position: 'absolute',
   width: CARD_WIDTH,
   pointerEvents: 'auto',
@@ -197,10 +215,14 @@ const Reply = styled.div(({ theme }) => ({
 const Actions = styled.div({ ...box, display: 'flex', justifyContent: 'flex-end', gap: 6 });
 const Spacer = styled.span({ flex: 1 });
 
-/** Where a card goes next to a screen point: to its right, or to its left near the right edge. */
-function cardPosition(point: { x: number; y: number }, board: Size): React.CSSProperties {
+/**
+ * Where a card goes next to a screen point: to its right, or to its left near the right edge (or
+ * near the comment list, when it is open, so the card does not cover it).
+ */
+export function cardPosition(point: { x: number; y: number }, board: Size, listOpen = false): React.CSSProperties {
+  const edge = board.width - 8 - (listOpen ? LIST_WIDTH + 12 : 0);
   const right = point.x + PIN_SIZE + 8;
-  const left = right + CARD_WIDTH > board.width - 8 ? Math.max(8, point.x - CARD_WIDTH - 8) : right;
+  const left = right + CARD_WIDTH > edge ? Math.max(8, Math.min(point.x, edge) - CARD_WIDTH - 8) : right;
   const top = Math.min(Math.max(8, point.y - PIN_SIZE), Math.max(8, board.height - 200));
   return { left, top };
 }
@@ -393,42 +415,42 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
 
   return (
     <Layer data-colab-comments="">
-      {state.listOpen && <CommentList state={state} />}
-
-      {pins.map((pin) => {
-        if (!pin.screen) return null;
-        const { comment } = pin;
-        return (
-          <Pin
-            key={comment.id}
-            ref={(element) => {
-              if (element) pinRefs.current.set(comment.id, element);
-              else pinRefs.current.delete(comment.id);
-            }}
-            type="button"
-            aria-label={pinLabel(comment, state)}
-            aria-expanded={openId === comment.id}
-            title={pin.placement.state === 'detached' ? 'The element is gone: shown on its story' : undefined}
-            data-colab-pin={comment.id}
-            data-colab-own=""
-            data-author={comment.author}
-            data-status={comment.status}
-            data-state={pin.placement.state}
-            data-open={openId === comment.id ? '' : undefined}
-            data-fresh={pin.fresh ? '' : undefined}
-            style={{
-              left: pin.screen.x + pin.stack * STACK_STEP,
-              top: pin.screen.y - (insideFrame(pin) ? 0 : PIN_SIZE),
-            }}
-            // A press on a pin is not a press on the board (no new comment, no pan, no select).
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={() => state.setOpenId(openId === comment.id ? null : comment.id)}
-          >
-            <AuthorIcon author={comment.author} />
-            {comment.replies.length > 0 && <ReplyCount aria-hidden>{comment.replies.length}</ReplyCount>}
-          </Pin>
-        );
-      })}
+      <PinLayer data-colab-pins="">
+        {pins.map((pin) => {
+          if (!pin.screen) return null;
+          const { comment } = pin;
+          return (
+            <Pin
+              key={comment.id}
+              ref={(element) => {
+                if (element) pinRefs.current.set(comment.id, element);
+                else pinRefs.current.delete(comment.id);
+              }}
+              type="button"
+              aria-label={pinLabel(comment, state)}
+              aria-expanded={openId === comment.id}
+              title={pin.placement.state === 'detached' ? 'The element is gone: shown on its story' : undefined}
+              data-colab-pin={comment.id}
+              data-colab-own=""
+              data-author={comment.author}
+              data-status={comment.status}
+              data-state={pin.placement.state}
+              data-open={openId === comment.id ? '' : undefined}
+              data-fresh={pin.fresh ? '' : undefined}
+              style={{
+                left: pin.screen.x + pin.stack * STACK_STEP,
+                top: pin.screen.y - (insideFrame(pin) ? 0 : PIN_SIZE),
+              }}
+              // A press on a pin is not a press on the board (no new comment, no pan, no select).
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={() => state.setOpenId(openId === comment.id ? null : comment.id)}
+            >
+              <AuthorIcon author={comment.author} />
+              {comment.replies.length > 0 && <ReplyCount aria-hidden>{comment.replies.length}</ReplyCount>}
+            </Pin>
+          );
+        })}
+      </PinLayer>
 
       {/* The hover highlight draws above pins, so its label stays readable. */}
       {hover && (
@@ -441,6 +463,8 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
         </Highlight>
       )}
 
+      {state.listOpen && <CommentList state={state} />}
+
       {draft && draftScreen && (
         <>
           <Pin
@@ -452,7 +476,10 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
           >
             <UserIcon aria-hidden />
           </Pin>
-          <CardPosition style={cardPosition(draftScreen, board)} onPointerDown={(event) => event.stopPropagation()}>
+          <CardPosition
+            style={cardPosition(draftScreen, board, state.listOpen)}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
             <Popover hasChrome padding={0} scrollable={false}>
               <Card data-colab-draft="">
                 <Muted>{draft.label}</Muted>
@@ -476,7 +503,11 @@ export function CommentLayer({ state, board }: CommentLayerProps) {
         <CardPosition
           style={
             openPin?.screen
-              ? cardPosition({ x: openPin.screen.x + openPin.stack * STACK_STEP, y: openPin.screen.y }, board)
+              ? cardPosition(
+                  { x: openPin.screen.x + openPin.stack * STACK_STEP, y: openPin.screen.y },
+                  board,
+                  state.listOpen,
+                )
               : { right: state.listOpen ? 332 : 12, top: 12 }
           }
           onPointerDown={(event) => event.stopPropagation()}

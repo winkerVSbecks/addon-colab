@@ -25,6 +25,8 @@ export const LIST_WIDTH = 320;
 const Panel = styled.aside(({ theme }) => ({
   ...box,
   ...hardText(theme),
+  // Above every pin (`LAYER_STACK.list` in CommentLayer.tsx); doubled so story rules cannot lower it.
+  '&&': { zIndex: 2 },
   position: 'absolute',
   top: 12,
   right: 12,
