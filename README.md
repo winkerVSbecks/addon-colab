@@ -1,5 +1,7 @@
 # <img src="https://raw.githubusercontent.com/winkerVSbecks/addon-colab/main/assets/icon.svg" alt="Colab Canvas icon" width="96" height="96" align="center"> Colab Canvas for Storybook
 
+[![Storybook](https://cdn.jsdelivr.net/gh/storybookjs/brand@main/badge/badge-storybook.svg)](https://main--6b084d0ac639954a18641c7a.chromatic.com)
+
 Colab Canvas (`storybook-addon-colab`) adds canvases to Storybook. A canvas is a board where you lay out live stories side by side, pin comments to specific elements inside them, and draw on top. A coding agent connected over MCP can read those comments, with enough detail to find the exact element in your code, reply to them and add its own.
 
 Each canvas is a JSON file in your repository, so canvases can be committed, reviewed and shared like any other file.
@@ -354,6 +356,17 @@ The repository ships two example canvases in `.storybook/canvases/` (`component-
 
 `pnpm check:browser` runs `scripts/check-board-*.mjs`. They need Google Chrome 157+ installed (set `CHROME` to its executable if it is not in `/Applications`): Playwright's bundled Chromium has no HTML-in-Canvas. The command starts its own Storybook on port 6190 (set `PORT` to change it) from `scripts/check-storybook`, with canvases in a temporary `.sb-checks/` folder that is deleted afterwards, so it never touches `.storybook/canvases`. Pass words to run some of the checks only: `pnpm check:browser draw comments`. Some checks delete and restore a story file in `scripts/fixtures`; the command puts back any fixture that is missing (from git) before and after the run, also when it had to kill a check that hung.
 
+### Visual tests
+
+The **Chromatic** workflow ([`.github/workflows/chromatic.yml`](.github/workflows/chromatic.yml)) runs [Chromatic](https://www.chromatic.com/docs/) on every push: it builds the addon and the example Storybook, publishes the Storybook and compares a snapshot of each story with its accepted baseline. Options are in [`chromatic.config.json`](chromatic.config.json); the project token is the repository secret `CHROMATIC_PROJECT_TOKEN`, so the job skips Chromatic in forks.
+
+- **Review changes in Chromatic, not in the job log.** Visual changes do not fail the job (it fails only when the Storybook does not build or a story errors). Chromatic's **UI Tests** check on the pull request stays pending until someone accepts or denies the changes, and that check is what to wait for before merging.
+- **Baselines.** Changes merged into `main` are accepted automatically (`autoAcceptChanges`), so `main` stays the baseline for new branches.
+- **What is snapshotted.** Every story in the static build, in Chromatic's capture browser. Canvases are not in the static build (they need the dev server). The canvas page story that draws the real board (**Addon/Canvas page › Empty**) has `chromatic: { disableSnapshot: true }`, because the board needs HTML-in-Canvas, which the capture browser may not have. Give any new story that depends on HTML-in-Canvas or the dev server the same parameter, or a fixed state such as the "needs Chrome 157" or "server unavailable" views.
+- **Animations.** Chromatic pauses CSS animations on their last frame, so spinners in loading stories are stable.
+
+The published Storybook for `main` is at the link in the badge above; that link works once `main` has had a Chromatic build (after the first push to `main`). Each branch gets its own at `https://<branch>--6b084d0ac639954a18641c7a.chromatic.com`.
+
 ## Releasing
 
 Releases are published to npm by [`.github/workflows/release.yml`](.github/workflows/release.yml) when a tag `v<version>` is pushed. It uses [npm trusted publishing](https://docs.npmjs.com/trusted-publishers): GitHub Actions proves its identity to npm with a short-lived OIDC token, so no npm token is stored in the repository or its secrets.
@@ -363,7 +376,9 @@ The workflow runs only for pushed tags that start with `v`, never for pull reque
 1. **Check, test and build** (read-only): fails at once unless the tag is exactly `v` + the `version` in `package.json`, then runs `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build` and `npm publish --dry-run`.
 2. **Publish to npm**: runs in the GitHub environment `npm`, so it waits for approval if the environment requires it. It upgrades npm to 11.21.3, builds again and runs `npm publish --provenance`. If that version is already on npm, it skips publishing and says so.
 
-**Dist-tag rule:** versions below 1.0.0, and versions with a pre-release identifier (anything with a `-`, such as `1.2.0-rc.1`), are published under `next`. Other versions are published under `latest`. Change the rule in the workflow's "Check that the tag matches package.json" step.
+Neither job uses a dependency cache: a cache shared with other workflow runs could change what gets published.
+
+**Dist-tag rule:** versions below 1.0.0, and versions with a pre-release identifier (anything with a `-`, such as `1.2.0-rc.1`), are published under `next`. Other versions are published under `latest`. The workflow always passes the dist-tag with `--tag`; change the rule in its "Check that the tag matches package.json" step. `package.json` also sets `publishConfig.tag` to `next`, so an `npm publish` without `--tag` goes out under `next`, not `latest`. (`npm publish --dry-run` still prints "latest" in its notice, because it logs the command-line default; the real publish uses `next`. A `--tag` on the command line overrides `publishConfig.tag`.) When the first stable version is released, change `publishConfig.tag` to `latest` in the same pull request.
 
 ### What npm's documentation requires
 
@@ -374,38 +389,35 @@ From [Trusted publishing for npm packages](https://docs.npmjs.com/trusted-publis
 - **`id-token: write`** on the publishing job, which lets it request the OIDC token ([GitHub's OIDC reference](https://docs.github.com/en/actions/reference/security/oidc)). The workflow grants only `id-token: write` and `contents: read`, and only to the publish job.
 - **Provenance** is generated automatically for trusted publishing from GitHub Actions when both the repository and the package are public. (`--provenance` is passed as well; it is harmless.)
 - **`repository.url` in `package.json` must match the GitHub repository** exactly.
-- **The trusted publisher names the workflow file name (`release.yml`), the repository (`winkerVSbecks/addon-colab`) and, optionally, an environment (`npm`).** All fields are case-sensitive. npm does not check them when you save; a mistake shows up as an authentication error when publishing. A connection can't be edited, only deleted and recreated.
-- **A new trusted publisher must complete a successful publish within 2 days**, or it expires and must be deleted and recreated. Set it up right before you push the release tag it will publish.
-- **The package must already exist on npm** before a trusted publisher can be added to it ("The package you're configuring must already exist on the npm registry", [`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust); the website's settings are also per package). So the first version, 0.1.0, has to be published from your own machine, without provenance. Every later version is published by the workflow.
+- **The trusted publisher names the workflow file name (`release.yml`), the repository (`winkerVSbecks/addon-colab`) and, optionally, an environment (`npm`).** "All fields are case-sensitive and must be exact." npm does not check them when you save; a mistake shows up as an authentication error when publishing. A connection can't be edited, only deleted and recreated.
+- **A new trusted publisher expires if it is not used within 2 days**: "A newly created trusted publisher configuration must complete its first successful publish within 2 days." Otherwise it must be deleted and recreated. So add it only when the release it will publish is ready (step 7 below), not after the first manual publish.
+- **The package must already exist on npm** before a trusted publisher can be added to it: "The package you're configuring must already exist on the npm registry" ([`npm trust`](https://docs.npmjs.com/cli/v11/commands/npm-trust); the website's settings are also per package). So the first version, 0.1.0, has to be published from your own machine, without provenance. Every later version is published by the workflow.
 
-### First release (0.1.0): manual steps, in order
+### Release checklist, in order
+
+Steps 1–6 are the first release (0.1.0). Steps 7–9 are the first release published by the workflow; every release after it repeats step 8.
 
 1. **Merge the pull request into `main`.** The README's icon URL and the workflow only work from `main`.
-2. **Check your npm account**: sign in on npmjs.com as the account that will own `storybook-addon-colab`, with two-factor authentication turned on, and check that the name is still free (`npm view storybook-addon-colab` returns 404).
-3. **Create the `npm` environment on GitHub**: repository **Settings → Environments → New environment**, name it `npm`. Under **Deployment protection rules** add yourself as a **required reviewer**, so each release waits for your approval. Under **Deployment branches and tags**, choose **Selected branches and tags** and add the tag rule `v*`.
-4. **Tag and publish 0.1.0 from your machine**, from a clean, up-to-date `main`:
+2. **Check your npm account**: sign in on npmjs.com as the account that will own `storybook-addon-colab`, with two-factor authentication turned on. `npm view storybook-addon-colab` must return 404 (the name is still free).
+3. **Create the `npm` environment on GitHub**: repository **Settings → Environments → New environment**, name it `npm`. Under **Deployment protection rules** add yourself as a **required reviewer**, so each release waits for your approval. Under **Deployment branches and tags**, choose **Selected branches and tags** and add the tag rule `v*`. Recommended: also add a tag ruleset (**Settings → Rules → Rulesets → New tag ruleset**) for `v*` that only you can bypass, so nobody else can create a release tag.
+4. **Publish 0.1.0 from your machine**, from a clean, up-to-date `main`:
 
    ```sh
    git switch main && git pull
-   git tag v0.1.0
+   git status                          # must be clean
    pnpm install --frozen-lockfile && pnpm build
-   npm publish --dry-run --tag next   # check the version and the file list
+   npm publish --dry-run --tag next    # check: version 0.1.0 and the 14 files
    npm login
    npm publish --tag next --access public
    ```
 
-   Always pass `--tag next` by hand: without it npm uses `latest`.
+   Never run a bare `npm publish`: always pass `--tag next` (and `--access public`), even though `publishConfig` sets both.
 
-5. **Add the trusted publisher**: on npmjs.com open `storybook-addon-colab` → **Settings** → **Trusted publishing** → **GitHub Actions**, and enter organization or user `winkerVSbecks` (with this capitalisation: the fields are case-sensitive), repository `addon-colab`, workflow filename `release.yml`, environment `npm`, and allow **npm publish**. Or, with npm 11.15.0 or later: `npm trust github storybook-addon-colab --file release.yml --repo winkerVSbecks/addon-colab --env npm --allow-publish`.
-6. **Push the tag**: `git push origin v0.1.0`. The workflow checks and builds the release. Approve the `npm` deployment; the publish step then reports that 0.1.0 is already on npm. This does not test trusted publishing, because nothing is published. Your next release does that, so it should follow within 2 days of step 5, or recreate the trusted publisher just before it.
-7. After a release has been published by the workflow, open **Settings → Publishing access** for the package and choose **Require two-factor authentication and disallow tokens**. Trusted publishing keeps working.
-
-### Every later release
-
-1. Set the new `version` in `package.json`, add its entry to `CHANGELOG.md`, and merge to `main`.
-2. Tag the merged commit and push the tag: `git tag v0.1.1 && git push origin v0.1.1`.
-3. Approve the `npm` deployment in the workflow run (Actions tab).
-4. Check the result: `npm view storybook-addon-colab dist-tags`, and the provenance badge on the package page.
+5. **Check the dist-tags**: `npm view storybook-addon-colab dist-tags`, and note whether `latest` was also set. npm may point `latest` at a package's first version whatever tag it was published under. Either way, `npm install storybook-addon-colab` installs 0.1.0 while it is the only version, and the `storybook` peer range (`^11.0.0-rc.0`) is what protects people on stable Storybook.
+6. **Tag 0.1.0 and run the workflow**: `git tag v0.1.0 && git push origin v0.1.0`, then approve the `npm` deployment (Actions tab). The workflow checks, tests and builds, then reports that 0.1.0 is already on npm. This tests the workflow, not trusted publishing, because nothing is published.
+7. **When the next release is ready, and no more than 2 days before you push its tag, add the trusted publisher**: on npmjs.com open `storybook-addon-colab` → **Settings** → **Trusted publishing** → **GitHub Actions**, and enter organization or user `winkerVSbecks` (exactly this case), repository `addon-colab`, workflow filename `release.yml`, environment `npm`, and allow **npm publish**. Or, with npm 11.15.0 or later: `npm trust github storybook-addon-colab --file release.yml --repo winkerVSbecks/addon-colab --env npm --allow-publish`.
+8. **Release it**: on a branch, set the new `version` in `package.json` and add its entry to `CHANGELOG.md`, then merge to `main`. Tag from an up-to-date `main` (`git switch main && git pull && git tag v0.1.1 && git push origin v0.1.1`), approve the `npm` deployment, then check `npm view storybook-addon-colab dist-tags` and the provenance badge on the package page. If more than 2 days pass after step 7 without a successful publish, delete the trusted publisher and add it again before pushing the tag.
+9. **After a workflow publish has succeeded**, open the package's **Settings → Publishing access** and choose **Require two-factor authentication and disallow tokens**. Trusted publishing keeps working.
 
 To lint the package before a release: `npx publint` and `npx @arethetypeswrong/cli --pack . --profile esm-only --exclude-entrypoints ./preset ./manager`. The addon is ESM-only, like Storybook 11, and the `preset` and `manager` entries are loaded by Storybook, not imported, so they ship without types.
 
