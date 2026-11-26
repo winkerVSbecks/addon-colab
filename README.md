@@ -1,4 +1,4 @@
-# Colab Canvas for Storybook
+# <img src="assets/icon.svg" alt="" width="96" height="96" align="center"> Colab Canvas for Storybook
 
 Colab Canvas (`storybook-addon-colab`) adds canvases to Storybook. A canvas is a board where you lay out live stories side by side, pin comments to specific elements inside them, and draw on top. A coding agent connected over MCP can read those comments, with enough detail to find the exact element in your code, reply to them and add its own.
 
