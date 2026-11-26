@@ -1,4 +1,4 @@
-// Drafts and thread focus (task 7a):
+// Drafts and thread focus:
 // - switching mode while the comment draft has text keeps the draft and its text (an empty draft
 //   still goes away);
 // - opening a thread from the list moves focus into it; Escape closes it and focus returns to the

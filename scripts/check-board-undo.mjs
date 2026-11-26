@@ -1,4 +1,4 @@
-// Undo for removing a frame (task 6a): the frame returns with the same id, position, size and place
+// Undo for removing a frame: the frame returns with the same id, position, size and place
 // in the stacking order, from the notice's Undo button or with ⌘Z / Ctrl+Z while it shows; focus
 // moves to the board after a removal.
 // Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=<its canvas dir> node scripts/check-board-undo.mjs

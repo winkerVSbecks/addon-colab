@@ -1,4 +1,4 @@
-// Comments on the board (task 7), end to end in the installed Chrome:
+// Comments on the board, end to end in the installed Chrome:
 // - comment mode from the toolbar; hover highlights the element under the pointer;
 // - a click pins a comment to Header's "Log in" without triggering the story, selecting or raising
 //   the frame; the stored target names the story file and a selector that matches exactly that

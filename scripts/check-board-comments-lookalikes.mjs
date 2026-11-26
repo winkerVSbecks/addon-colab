@@ -1,4 +1,4 @@
-// A pin never attaches to a look-alike (task 7b). The rule: a pin attaches only with positive
+// A pin never attaches to a look-alike. The rule: a pin attaches only with positive
 // evidence that it is the pinned element and not one of the look-alikes that existed when it was
 // pinned; in doubt it detaches. Uses the check-only stories in scripts/fixtures/LookAlikes.stories.tsx
 // and changes them through their own buttons, the way an app would:

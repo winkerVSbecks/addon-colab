@@ -1,4 +1,4 @@
-// The board's one undo stack (task 7 seam): a second removal no longer drops the first, ⌘Z undoes
+// The board's one undo stack: a second removal no longer drops the first, ⌘Z undoes
 // them in reverse order, ⇧⌘Z redoes, and a later notice does not take an earlier undo away.
 // Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6171 CANVAS_DIR=<its canvas dir> node scripts/check-board-undo-stack.mjs
 import { readFileSync } from 'node:fs';

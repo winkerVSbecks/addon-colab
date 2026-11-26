@@ -1,5 +1,5 @@
 /**
- * Test fixture (task 6): a project that customises sidebar labels with `sidebar.renderLabel`.
+ * Test fixture: a project that customises sidebar labels with `sidebar.renderLabel`.
  *
  * The addon makes sidebar story rows draggable onto canvases without touching this slot, so this
  * label must still render (and the rows must still drag). The checks in

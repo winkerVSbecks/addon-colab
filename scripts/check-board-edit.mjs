@@ -96,7 +96,7 @@ await page.waitForFunction(() => {
 }, null, { timeout: 3000 }).then(() => check('hand edit of the file appears live', true), () => check('hand edit of the file appears live', false));
 
 // Overlapping frames: drag the Button frame over the Header. Dragging selects it, which brings it
-// to the front (task 6a), so the dragged frame is on top and last in the file.
+// to the front, so the dragged frame is on top and last in the file.
 await setView(page, 'board', { x: 60, y: 60, zoom: 1 });
 await page.reload();
 await waitForBoard(page, 3);

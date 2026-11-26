@@ -1,4 +1,4 @@
-// Drawing on the board (task 8): draw mode, pen, eraser, undo/redo, clear-all, live remote strokes,
+// Drawing on the board: draw mode, pen, eraser, undo/redo, clear-all, live remote strokes,
 // one write per multi-stroke erase, and stroke alignment proved from the stroke layer's own pixels (not from screenshots): a box drawn
 // around a story's button must still enclose that button's getBoundingClientRect at zoom 0.5 and 2,
 // after a reload, at DPR 1 and 2, and with hostile story CSS on the page.

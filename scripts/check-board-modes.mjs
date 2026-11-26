@@ -1,4 +1,4 @@
-// The mode switcher (task 7a): a radio group (one checked radio in the Tab order; arrow keys move
+// The mode switcher: a radio group (one checked radio in the Tab order; arrow keys move
 // focus as in any Storybook Toolbar, Space checks), and after a mode is chosen with a click, Space-drag pans at once (focus went back
 // to the board) instead of pressing the button again or starting a comment.
 // Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=<its canvas dir> node scripts/check-board-modes.mjs

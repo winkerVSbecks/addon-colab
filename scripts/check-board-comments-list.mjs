@@ -1,4 +1,4 @@
-// Pins never cover the comment list (task 7a): 52 comments whose pins sit under the open list (and
+// Pins never cover the comment list: 52 comments whose pins sit under the open list (and
 // 25 in dark mode). Every list row must receive the click meant for it, and a thread opened from
 // the list must sit above every pin. Also checked with a story rule that gives every button a high
 // z-index. Screenshots go to $OUT (default $TMPDIR).

@@ -1,4 +1,4 @@
-// Comments when stories re-render, and against story CSS (task 7):
+// Comments when stories re-render, and against story CSS:
 // - a pin on the Page story's "Sign up" detaches (falls back to its frame, marked) when the story
 //   logs in and the button goes, and comes back to the button when it logs out again;
 // - the comment UI keeps its text styles, pin size and list width when a story's global CSS

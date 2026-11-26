@@ -1,4 +1,4 @@
-// A pin never sits on a different element (task 7a). Cases from the task 7 verification:
+// A pin never sits on a different element. Cases found in earlier verification:
 // - pin the Page story's "Log in", log in inside the story: the pin detaches (never moves onto
 //   "Log out"), and comes back to "Log in" after logging out;
 // - pin "Row C" (a span, no role or name) and Row C's "Delete" (a name every row shares) in the

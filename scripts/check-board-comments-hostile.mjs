@@ -1,4 +1,4 @@
-// The comment UI and board toolbar stay usable under a hostile story rule (task 7a):
+// The comment UI and board toolbar stay usable under a hostile story rule:
 // `* { margin: 12px; padding: 8px; font: 20px/2 serif }` must not push the thread's Delete and
 // Close buttons out of view, hide pin icons, or balloon the list and the board toolbar.
 // Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6177 CANVAS_DIR=<its canvas dir> node scripts/check-board-comments-hostile.mjs

@@ -1,4 +1,4 @@
-// Strokes stay visible and aligned (task 8a).
+// Strokes stay visible and aligned.
 // 1. Contrast: one stroke per colour (width 4, zoom 1) crosses a white story and the empty board,
 //    in the light and the dark theme. From real screenshots, it measures the line's core against
 //    what is behind it, against its outline, and the outline against what is behind it. A stroke

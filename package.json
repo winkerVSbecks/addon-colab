@@ -35,8 +35,9 @@
   "files": [
     "dist/**/*",
     "README.md",
-    "*.js",
-    "*.d.ts"
+    "manager.js",
+    "preset.js",
+    "preview.js"
   ],
   "scripts": {
     "prebuild": "node -e \"fs.rmSync('./dist', { recursive: true, force: true })\"",

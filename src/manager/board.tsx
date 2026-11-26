@@ -1,5 +1,5 @@
 /**
- * Manager side of the canvas board (task 6): stories in the sidebar become drag sources, and the
+ * Manager side of the canvas board: stories in the sidebar become drag sources, and the
  * toolbar gets "Add to canvas" while a story is open. Called from `src/manager.tsx`.
  */
 import React from 'react';

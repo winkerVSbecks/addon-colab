@@ -1,6 +1,6 @@
-// A frame narrower than the minimum in the file is shown at the minimum width (task 6a); undoing
-// its removal puts back the file's own size (task 9); at low zoom a selected small frame's title
-// keeps a usable width (task 9).
+// A frame narrower than the minimum in the file is shown at the minimum width; undoing
+// its removal puts back the file's own size; at low zoom a selected small frame's title
+// keeps a usable width.
 // Rewrites $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6170 CANVAS_DIR=<its canvas dir> node scripts/check-board-minsize.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
 

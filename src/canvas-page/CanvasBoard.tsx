@@ -36,7 +36,7 @@ import { usePanZoom } from './board/use-pan-zoom';
 import { useStoryDrop } from './board/use-story-drop';
 import { useUndoStack } from './board/use-undo-stack';
 import { useComments } from './board/use-comments';
-// Drawing (task 8): strokes over the frames, and draw mode's tool.
+// Drawing: strokes over the frames, and draw mode's tool.
 import { DEFAULT_DRAW_SETTINGS, DRAW_COLORS, DRAW_WIDTHS, DrawOptions } from './board/DrawOptions';
 import { StrokeLayer, type StrokeLayerHandle } from './board/StrokeLayer';
 import { LAYER_BOX, pinStyle } from './board/layer-box';
@@ -147,7 +147,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     if (canvasRef.current) pinStyle(canvasRef.current, SURFACE_BOX);
   }, [canvasRef]);
 
-  // Zoom to fit covers the frames and the open comment pins outside them (task 7a).
+  // Zoom to fit covers the frames and the open comment pins outside them.
   const bounds = useMemo(
     () =>
       boundsOf([
@@ -202,7 +202,7 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   };
   useLayoutEffect(() => paint());
 
-  // Comments (task 7): pins, threads and the list; comment mode's hover and press.
+  // Comments: pins, threads and the list; comment mode's hover and press.
   const storyName = useCallback(
     (storyId: string) => {
       const frame = frames.find((f) => f.storyId === storyId);

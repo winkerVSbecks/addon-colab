@@ -806,7 +806,7 @@ describe('describeElement: look-alikes', () => {
 });
 
 describe('resolveTarget: targets saved by earlier versions', () => {
-  it('honours a context saved without lookAlikes (task 7a files)', () => {
+  it('honours a context saved without lookAlikes (files written before lookAlikes existed)', () => {
     const root = story(ROWS);
     const target = { ...pin(root, rowDelete(root, 'Row C') as Element) };
     delete target.lookAlikes;

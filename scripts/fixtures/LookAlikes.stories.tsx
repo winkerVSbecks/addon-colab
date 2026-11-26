@@ -1,7 +1,7 @@
 // Check-only stories (not in the addon's example stories) full of look-alike elements, each with
 // buttons (`data-action`) that change the story the way an app would: filter or reorder a list,
 // remove a card or one of two "Save" buttons, swap or move an element. Used by
-// scripts/check-board-comments-lookalikes.mjs (task 7b: a pin never attaches to a look-alike).
+// scripts/check-board-comments-lookalikes.mjs (a pin never attaches to a look-alike).
 import React, { useState } from 'react';
 
 import type { Meta, StoryObj } from '@storybook/react-vite';

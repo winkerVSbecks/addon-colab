@@ -1,4 +1,4 @@
-// Keyboard on the board (task 6a): keys pressed inside a story belong to the story.
+// Keyboard on the board: keys pressed inside a story belong to the story.
 // - Clicking plain text in a story, then Backspace or Delete, does not remove its frame.
 // - Space on a focused button inside a story activates it (Page: "Log in" logs in).
 // - Space+drag still pans when the board itself has focus; a frame's title still removes with Delete.

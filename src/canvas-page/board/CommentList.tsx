@@ -3,7 +3,7 @@
  * pin into view and opens its thread; comments whose story is no longer on the canvas are listed
  * too and open their thread next to the list.
  *
- * Why a list on the board and not an addon panel: task 5a hides Storybook's addon panel on canvas
+ * Why a list on the board and not an addon panel: the addon hides Storybook's addon panel on canvas
  * pages so the board gets the whole preview, and the list drives board state that lives in the
  * preview (the open thread, centring a pin). A manager panel would need its own copy of the canvas
  * and a new channel event to focus a pin. Built from Storybook's `ScrollArea`, `Button`,

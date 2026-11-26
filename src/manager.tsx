@@ -26,7 +26,7 @@ if (hasCanvasServer) installCanvasLayout(addons);
 addons.register(ADDON_ID, (api) => {
   if (!hasCanvasServer) return;
 
-  // Canvases toolbar menu (task 5): new, rename, delete, and the list of canvases.
+  // Canvases toolbar menu: new, rename, delete, and the list of canvases.
   addons.add(CANVAS_TOOL_ID, {
     type: types.TOOL,
     title: 'Canvases',
@@ -49,6 +49,6 @@ addons.register(ADDON_ID, (api) => {
   // One zoom control on canvas pages (the board's): Storybook's is hidden there and reset to 100%.
   hideZoomOnCanvases(api, addons, [STORY_CHANGED, STORY_SPECIFIED]);
 
-  // Canvas board (task 6): drag stories from the sidebar, and "Add to canvas" in the toolbar.
+  // Canvas board: drag stories from the sidebar, and "Add to canvas" in the toolbar.
   registerBoard(api);
 });

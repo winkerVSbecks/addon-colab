@@ -1,4 +1,4 @@
-// Node-side preset: canvas storage over Storybook's server channel. MCP (task 4) is added here too.
+// Node-side preset: canvas storage over Storybook's server channel. The MCP endpoint is added here too.
 import { isAbsolute, join, resolve } from 'node:path';
 
 import type { Options } from 'storybook/internal/types';
@@ -41,7 +41,7 @@ export const experimental_serverChannel = async <C extends ChannelLike>(
   return channel;
 };
 
-// MCP endpoint for coding agents (task 4): served by this dev server and backed by the same store.
+// MCP endpoint for coding agents: served by this dev server and backed by the same store.
 export const experimental_devServer = async <A extends DevServerApp>(
   app: A,
   options: Options & ColabAddonOptions,
@@ -50,7 +50,7 @@ export const experimental_devServer = async <A extends DevServerApp>(
   return app;
 };
 
-// Canvases as sidebar entries (task 5): one "Canvases" entry per canvas file, dev server only.
+// Canvases as sidebar entries: one "Canvases" entry per canvas file, dev server only.
 // `tags` keeps the canvas tags out of the sidebar's tag filter.
 export const { stories, experimental_indexers, viteFinal, tags } = canvasEntryPresets<Options & ColabAddonOptions>(
   canvasDirFor,
