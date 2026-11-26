@@ -6,14 +6,30 @@ Colab Canvas (`storybook-addon-colab`) adds canvases to Storybook. A canvas is a
 
 Each canvas is a JSON file in your repository, so canvases can be committed, reviewed and shared like any other file.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/winkerVSbecks/addon-colab/main/assets/screenshots/hero-dark.png">
+  <img src="https://raw.githubusercontent.com/winkerVSbecks/addon-colab/main/assets/screenshots/hero.png" alt="A canvas named Design review in Storybook. The Header, Button and Page stories are laid out on a dotted board, with a comment pin on the Header’s Sign up button, an agent’s comment pin on the Button story, and a red loop drawn around the Page’s heading." width="800">
+</picture>
+
 ## A short walkthrough
 
 1. **Create a canvas.** Click **Canvases** in Storybook's toolbar and choose **New canvas…**. The canvas appears in the sidebar under **Canvases** and opens.
+
+   <img src="https://raw.githubusercontent.com/winkerVSbecks/addon-colab/main/assets/screenshots/canvases-menu.png" alt="The Canvases menu open in Storybook’s toolbar, with Rename canvas, Delete canvas, the Design review canvas (3 stories, 2 open comments) and New canvas." width="800">
+
 2. **Add stories.** Drag a story from the sidebar onto the board. It lands where you drop it and stays live: you can click its buttons and type in its inputs. You can also open a story and use **Add to canvas** in the toolbar. Drag a story's title to move it. Click the title to select the story; a selected story has resize handles on its right and bottom edges and an ✕ next to its title that removes it.
 3. **Comment.** Switch to comment mode (the comment button in the board's toolbar, or press <kbd>C</kbd>). Hovering highlights the element under the pointer. Click to pin a comment to it, type, and press <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>Enter</kbd>. Click a story's empty area to comment on the whole story, or the empty board to comment on a spot.
+
+   <img src="https://raw.githubusercontent.com/winkerVSbecks/addon-colab/main/assets/screenshots/comment-mode.png" alt="Comment mode on a canvas: the pointer is over the Header story’s Sign up button, which is outlined with the label button “Sign up”." width="800">
+
 4. **Draw.** Switch to draw mode (the pencil, or <kbd>D</kbd>) and sketch over the stories: circle a problem, cross something out. Pick a colour and width, or switch to the eraser.
+
+   <img src="https://raw.githubusercontent.com/winkerVSbecks/addon-colab/main/assets/screenshots/draw-mode.png" alt="Draw mode on a canvas: the drawing options bar with pen, eraser, six colours, three widths and Clear drawing, and a red loop drawn around the Page story’s heading." width="800">
+
 5. **Connect an agent** (see [Connect a coding agent](#connect-a-coding-agent)) and ask it something like "fix the open comments on the design-review canvas".
 6. **The agent replies and changes code.** It lists the open comments, finds each element from its story file, selector, HTML and text, edits the component, replies to say what it changed and resolves the comment. Its replies appear on the open canvas within a second or two, and the story re-renders with the change through Storybook's hot reload.
+
+   <img src="https://raw.githubusercontent.com/winkerVSbecks/addon-colab/main/assets/screenshots/comment-thread.png" alt="An open comment thread on the Sign up button: the user asks for the brand purple, and the agent’s reply explains where the colour comes from and asks how to proceed." width="800">
 
 ## Requirements
 
@@ -355,6 +371,8 @@ pnpm check:browser    # browser checks in the installed Chrome (see below)
 The repository ships two example canvases in `.storybook/canvases/` (`component-review.json` and `testing.json`); they appear under **Canvases** in the sidebar when you run `pnpm storybook`.
 
 `pnpm check:browser` runs `scripts/check-board-*.mjs`. They need Google Chrome 157+ installed (set `CHROME` to its executable if it is not in `/Applications`): Playwright's bundled Chromium has no HTML-in-Canvas. The command starts its own Storybook on port 6190 (set `PORT` to change it) from `scripts/check-storybook`, with canvases in a temporary `.sb-checks/` folder that is deleted afterwards, so it never touches `.storybook/canvases`. Pass words to run some of the checks only: `pnpm check:browser draw comments`. Some checks delete and restore a story file in `scripts/fixtures`; the command puts back any fixture that is missing (from git) before and after the run, also when it had to kill a check that hung.
+
+`pnpm screenshots` regenerates the README screenshots in `assets/screenshots/` (`scripts/readme-screenshots.mjs`). Like the browser checks, it starts its own Storybook (port 6197, `PORT` to change it; config in `scripts/screenshot-storybook`) with a temporary `.sb-screenshots/` canvas folder, and needs Google Chrome 157+. It builds the scene through the UI, the addon's channel and the MCP endpoint, captures at 1440 × 900 at 2x and scales each image to 1600 px wide. Compress the results before committing, for example with `npx -y pngquant-bin --quality 80-95 --strip --force --ext .png assets/screenshots/*.png` and `npx -y oxipng -o 4 --strip safe assets/screenshots/*.png`.
 
 ### Visual tests
 

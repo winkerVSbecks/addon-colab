@@ -52,6 +52,7 @@
     "lint": "eslint --cache .",
     "lint:fix": "pnpm lint --fix",
     "start": "run-p build:watch \"storybook --quiet\"",
+    "screenshots": "node scripts/readme-screenshots.mjs",
     "storybook": "storybook dev -p 6006",
     "test": "vitest run",
     "test:watch": "vitest",
