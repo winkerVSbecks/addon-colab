@@ -28,8 +28,14 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** A new canvas: the board mount point with the empty-state message over it. */
+/**
+ * A new canvas: the board mount point with the empty-state message over it.
+ *
+ * Not snapshotted in Chromatic: the board needs HTML-in-Canvas (Chrome 157+), which the capture browser may
+ * lack, and without it this story throws instead of rendering. `UnsupportedBrowser` covers the fallback.
+ */
 export const Empty: Story = {
+  parameters: { chromatic: { disableSnapshot: true } },
   play: async ({ canvasElement }) => {
     const page = within(canvasElement);
     await expect(page.getAllByText('Checkout review is empty')).toHaveLength(2);

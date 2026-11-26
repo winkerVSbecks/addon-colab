@@ -2,7 +2,7 @@
 import React from 'react';
 
 import type { Decorator } from '@storybook/react-vite';
-import { styled } from 'storybook/theming/emotion';
+import { Global, styled } from 'storybook/theming/emotion';
 
 import { StorybookThemeProvider } from './ui-theme';
 
@@ -38,9 +38,13 @@ export const withLightAndDark: Decorator = (Story, context) => {
   );
 };
 
-/** Renders the story under one theme, `parameters.uiTheme` (`'light'` or `'dark'`). For modals, which portal out. */
+/**
+ * Renders the story under one theme, `parameters.uiTheme` (`'light'` or `'dark'`). For modals, which portal out
+ * to `<body>`: the body gets the theme's font, as it has in the manager, so the dialog text is not the browser's serif.
+ */
 export const withUiTheme: Decorator = (Story, context) => (
   <StorybookThemeProvider theme={context.parameters.uiTheme as 'light' | 'dark' | undefined}>
+    <Global styles={({ typography }) => ({ body: { fontFamily: typography.fonts.base } })} />
     <Story />
   </StorybookThemeProvider>
 );

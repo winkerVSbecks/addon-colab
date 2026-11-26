@@ -9,7 +9,8 @@ import { CanvasDeleteDialog, CanvasNameDialog } from './CanvasDialogs';
 const meta = {
   title: 'Addon/Canvas dialogs',
   decorators: [withUiTheme],
-  parameters: { layout: 'fullscreen' },
+  // A fixed theme, so snapshots do not follow the capture browser's colour scheme.
+  parameters: { layout: 'fullscreen', uiTheme: 'light' },
 } satisfies Meta;
 
 export default meta;
