@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "id": "testing",
+  "name": "Testing",
+  "createdAt": "2026-11-25T16:46:58.054Z",
+  "updatedAt": "2026-11-25T19:17:05.644Z",
+  "frames": [
+    {
+      "id": "frame-3b7e40f16c33",
+      "storyId": "example-page--logged-out",
+      "x": 232,
+      "y": 300,
+      "width": 960,
+      "height": 623
+    }
+  ],
+  "comments": [
+    {
+      "id": "comment-09b337b95f3e",
+      "author": "user",
+      "body": "make this lead",
+      "status": "open",
+      "anchor": {
+        "type": "element",
+        "frameId": "frame-3b7e40f16c33",
+        "target": {
+          "storyId": "example-page--logged-out",
+          "title": "Example/Page",
+          "importPath": "./src/stories/Page.stories.ts",
+          "selector": "p:nth-of-type(1)",
+          "html": "<p>We recommend building UIs with a <a href=\"https://componentdriven.org\" target=\"_blank\" rel=\"noopener noreferrer\"><strong>component-driven</strong></a> process starting with atomic components and ending with pages.</p>",
+          "text": "We recommend building UIs with a component-driven process starting with atomic components and ending with pages.",
+          "role": "paragraph"
+        }
+      },
+      "createdAt": "2026-11-25T19:15:54.306Z",
+      "replies": []
+    }
+  ],
+  "strokes": [
+    {
+      "id": "stroke-03c03674e93f",
+      "color": "#FF4400",
+      "width": 4,
+      "points": [[304.8,714.3],[307,707.8],[313.1,698.3],[324,684.7],[363,642.3],[395.5,609.8],[397.4,606.4]]
+    },
+    {
+      "id": "stroke-00cfb98188e4",
+      "color": "#FF4400",
+      "width": 4,
+      "points": [[366,593.7],[411.9,592.6],[408,623.5],[404.7,639.2]]
+    },
+    {
+      "id": "stroke-8eb661622216",
+      "color": "#E69D00",
+      "width": 4,
+      "points": [[396,804.8],[883.7,804.8],[903.9,805.8],[918.9,808.5],[940.9,816.8],[948,823.9],[951.8,833.7],[949.1,839.7],[941.2,845.4],[927.5,851.9],[908.8,857.3],[885.4,861.4],[857.9,863.7],[795.6,866],[663.6,866.6],[529.2,875.6],[402.5,875.1],[391.4,874],[383,870.5],[374.8,864.9],[371,860.7],[365,850.4],[360.5,832.8],[361,812.6],[366.9,802.3],[373.1,797.6],[381.3,794.2],[391.2,791.9],[404.4,791.4],[407.5,792.7],[410.8,796.5]]
+    }
+  ]
+}

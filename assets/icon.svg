@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" fill="none">
+  <rect width="160" height="160" rx="20" fill="#029CFD"/>
+  <rect x="27" y="75" width="82" height="42" rx="9" fill="#1EA7FD" stroke="#fff" stroke-width="6"/>
+  <path d="M80 68C80 52.536 92.536 40 108 40C123.464 40 136 52.536 136 68C136 83.464 123.464 96 108 96H80V68Z" fill="#fff"/>
+  <mask id="pin-ring" maskUnits="userSpaceOnUse" x="76" y="36" width="64" height="64" fill="#000">
+    <rect x="76" y="36" width="64" height="64" fill="#fff"/>
+    <path d="M80 68C80 52.536 92.536 40 108 40C123.464 40 136 52.536 136 68C136 83.464 123.464 96 108 96H80V68Z"/>
+  </mask>
+  <path d="M80 96H108C123.464 96 136 83.464 136 68C136 52.536 123.464 40 108 40C92.536 40 80 52.536 80 68V96Z" stroke="#029CFD" stroke-width="8" mask="url(#pin-ring)"/>
+</svg>

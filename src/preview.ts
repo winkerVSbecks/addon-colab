@@ -1,29 +1,20 @@
-/**
- * A decorator is a way to wrap a story in extra “rendering” functionality. Many addons define decorators
- * in order to augment stories:
- * - with extra rendering
- * - gather details about how a story is rendered
- *
- * When writing stories, decorators are typically used to wrap stories with extra markup or context mocking.
- *
- * https://storybook.js.org/docs/react/writing-stories/decorators
- */
+import { addons } from 'storybook/preview-api';
 import type { ProjectAnnotations, Renderer } from 'storybook/internal/types';
 
-import { KEY } from './constants';
-import { withGlobals } from './withGlobals';
-import { withRoundTrip } from './withRoundTrip';
+import type { ChannelLike } from './channel';
+import { withCanvasPage } from './canvas-page/decorator';
+import { installEntryReady } from './canvas-page/entry-ready';
 
-/**
- * Note: if you want to use JSX in this file, rename it to `preview.tsx`
- * and update the entry prop in tsup.config.ts to use "src/preview.tsx",
- */
+// Canvas entries open without Storybook's error page while the preview's map of story files catches
+// up (src/entry-ready.ts). Only adds retries. Waits for the real channel: before one is installed,
+// `getChannel()` returns a mock that would never receive anything.
+const install = (channel: unknown) => installEntryReady(channel as ChannelLike);
+if (addons.hasChannel()) install(addons.getChannel());
+else void addons.ready().then(install);
 
 const preview: ProjectAnnotations<Renderer> = {
-  decorators: [withGlobals, withRoundTrip],
-  initialGlobals: {
-    [KEY]: false,
-  },
+  // Canvas entries render the canvas page; other stories are untouched.
+  decorators: [withCanvasPage],
 };
 
 export default preview;

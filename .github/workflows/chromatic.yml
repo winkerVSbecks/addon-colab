@@ -1,0 +1,78 @@
+# Publishes the Storybook to Chromatic and runs its visual tests on every push.
+#
+# Options (project id, build script, zip, auto-accept on main) are in chromatic.config.json.
+# The project token is the repository secret CHROMATIC_PROJECT_TOKEN. Without it (for example in a
+# fork) the Chromatic steps are skipped and the job still passes.
+#
+# Visual changes do not fail this job (exitZeroOnChanges, the action's default): it fails only when
+# the Storybook does not build or a story errors. Review changes in Chromatic; its "UI Tests" status
+# on the pull request is the merge gate. Chromatic posts that status through its GitHub app, so this
+# workflow needs no write permissions.
+#
+# On push (not pull_request), so the build is for the branch's real commit and Chromatic finds the
+# right baselines. See https://www.chromatic.com/docs/github-actions
+
+name: Chromatic
+
+on: push
+
+permissions: {}
+
+concurrency:
+  group: chromatic-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chromatic:
+    name: Run Chromatic
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'ci skip') && !contains(github.event.head_commit.message, 'skip ci')"
+    permissions:
+      contents: read
+    steps:
+      - name: Check for the Chromatic project token
+        id: token
+        env:
+          HAS_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" = "true" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::CHROMATIC_PROJECT_TOKEN is not set for this repository (for example in a fork); skipping Chromatic."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Full history: Chromatic walks git history to find baselines (and TurboSnap needs it).
+      - name: Checkout
+        if: steps.token.outputs.available == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install pnpm
+        if: steps.token.outputs.available == 'true'
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Use Node.js 24
+        if: steps.token.outputs.available == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        if: steps.token.outputs.available == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # The repository's Storybook loads the addon from dist (.storybook/local-preset.ts).
+      - name: Build addon
+        if: steps.token.outputs.available == 'true'
+        run: pnpm build
+
+      # Builds the Storybook with the build-storybook script, then uploads and tests it.
+      - name: Run Chromatic
+        if: steps.token.outputs.available == 'true'
+        uses: chromaui/action@0a7067e5ffc663a631b14db505d8a94b26e1bf2f # v18.15.3
+        with:
+          projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}

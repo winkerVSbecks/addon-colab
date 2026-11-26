@@ -2,3 +2,6 @@ dist
 pnpm-lock.yaml
 node_modules
 storybook-static
+# Canvas files are written by serializeCanvasFile; keep its formatting
+.storybook/canvases
+src/__fixtures__

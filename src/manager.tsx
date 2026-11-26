@@ -1,38 +1,54 @@
 import React from 'react';
+
+import { STORY_CHANGED, STORY_INDEX_INVALIDATED, STORY_SPECIFIED } from 'storybook/internal/core-events';
 import { addons, types } from 'storybook/manager-api';
 
-import { Panel } from './components/Panel';
-import { Tab } from './components/Tab';
-import { Tool } from './components/Tool';
-import { ADDON_ID, PANEL_ID, TAB_ID, TOOL_ID } from './constants';
+import { type ChannelLike, onCanvasChanged } from './channel';
+import { ADDON_ID } from './constants';
+import { CanvasTool } from './manager/CanvasTool';
+import { registerBoard } from './manager/board';
+import { trackBrokenCanvases } from './manager/broken-status';
+import { hideZoomOnCanvases, installCanvasLayout } from './manager/layout';
+import { leaveCanvas, leaveRemovedCanvas } from './manager/navigation';
+import { installManagerTheme } from './manager/theme';
+
+const CANVAS_TOOL_ID = `${ADDON_ID}/canvases`;
 
 /**
- * Note: if you want to use JSX in this file, rename it to `manager.tsx`
- * and update the entry prop in tsup.config.ts to use "src/manager.tsx",
+ * Canvases live on the dev server (`storybook dev`). A static build (`storybook build`) has no canvas
+ * server and no canvas entries, so the addon adds nothing to its manager.
  */
+const hasCanvasServer = (globalThis as { CONFIG_TYPE?: string }).CONFIG_TYPE !== 'PRODUCTION';
 
-// Register the addon
+// No addon panel on canvas pages: the board fills the preview.
+if (hasCanvasServer) installCanvasLayout(addons);
+
 addons.register(ADDON_ID, (api) => {
-  // Register a tool
-  addons.add(TOOL_ID, {
+  if (!hasCanvasServer) return;
+
+  // Canvases toolbar menu: new, rename, delete, and the list of canvases.
+  addons.add(CANVAS_TOOL_ID, {
     type: types.TOOL,
-    title: 'My addon',
-    match: ({ viewMode, tabId }) => !!((viewMode && viewMode.match(/^(story)$/)) || tabId === TAB_ID),
-    render: () => <Tool api={api} />,
+    title: 'Canvases',
+    match: ({ viewMode }) => viewMode === 'story' || viewMode === 'docs',
+    render: () => <CanvasTool />,
   });
 
-  // Register a panel
-  addons.add(PANEL_ID, {
-    type: types.PANEL,
-    title: 'My addon',
-    match: ({ viewMode }) => viewMode === 'story',
-    render: ({ active }) => <Panel active={active} />,
+  // A canvas deleted elsewhere (another tab, an MCP agent, a hand edit) while it is open: leave its
+  // page. The store's event usually comes first; the index check catches deletes it does not see.
+  const channel = addons.getChannel();
+  // Canvas pages follow the manager's theme, not the system colour scheme.
+  installManagerTheme(channel as ChannelLike);
+  // A warning icon on broken canvas files in the sidebar.
+  trackBrokenCanvases(channel as ChannelLike);
+  onCanvasChanged(channel as ChannelLike, (event) => {
+    if (event.type === 'deleted') void leaveCanvas(api, event.id);
   });
+  channel.on(STORY_INDEX_INVALIDATED, () => void leaveRemovedCanvas(api));
 
-  // Register a tab
-  addons.add(TAB_ID, {
-    type: types.TAB,
-    title: 'My addon',
-    render: ({ active }) => <Tab active={active} />,
-  });
+  // One zoom control on canvas pages (the board's): Storybook's is hidden there and reset to 100%.
+  hideZoomOnCanvases(api, addons, [STORY_CHANGED, STORY_SPECIFIED]);
+
+  // Canvas board: drag stories from the sidebar, and "Add to canvas" in the toolbar.
+  registerBoard(api);
 });

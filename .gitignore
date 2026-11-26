@@ -2,6 +2,12 @@ dist/
 node_modules/
 storybook-static/
 build-storybook.log
+chromatic.log
+chromatic-diagnostics.json
 .DS_Store
 .env
 .eslintcache
+.impeccable/
+
+# Temporary Storybook configs and canvases used by checks
+.sb-*/

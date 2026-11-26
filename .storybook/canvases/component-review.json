@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "component-review",
+  "name": "Component review",
+  "createdAt": "2026-11-25T16:57:31.476Z",
+  "updatedAt": "2026-11-25T21:14:12.973Z",
+  "frames": [
+    {
+      "id": "frame-a1c25d46ff54",
+      "storyId": "example-button--primary",
+      "x": -483,
+      "y": 102,
+      "width": 480,
+      "height": 68
+    },
+    {
+      "id": "frame-60a9e17b15a9",
+      "storyId": "example-header--logged-in",
+      "x": -486,
+      "y": -39,
+      "width": 960,
+      "height": 63
+    },
+    {
+      "id": "frame-881b9fbb9d4e",
+      "storyId": "example-page--logged-out",
+      "x": -482,
+      "y": 245,
+      "width": 930,
+      "height": 623
+    },
+    {
+      "id": "frame-604e8c416200",
+      "storyId": "example-page--logged-in",
+      "x": 735,
+      "y": 76,
+      "width": 960,
+      "height": 623
+    }
+  ],
+  "comments": [],
+  "strokes": []
+}
