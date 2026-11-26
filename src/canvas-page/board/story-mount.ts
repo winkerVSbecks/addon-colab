@@ -73,7 +73,14 @@ export function isMissingStoryError(error: unknown): boolean {
  * is a new object, which happens when its CSF file was hot-reloaded; component edits are picked up
  * by React Fast Refresh without this. A story that is not in the index is reported as `missing`
  * (also when it disappears later: its render is torn down), and mounts if a refresh finds it again.
+ *
+ * A load that fails is tried again after `RETRY_DELAYS`: when a story file is deleted and comes
+ * back, Storybook announces the change (and may reload the page) before the file can be imported,
+ * so the first load reports the story as missing or failing although it is about to be there.
  */
+/** Delays (ms) before trying a failed load again. A later refresh starts a new series. */
+export const RETRY_DELAYS = [500, 2000];
+
 export function mountStory(
   preview: PreviewLike,
   storyId: string,
@@ -83,6 +90,9 @@ export function mountStory(
   let current: PreparedStoryLike | undefined;
   let teardownRender: (() => Promise<void>) | undefined;
   let disposed = false;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Bumped by every load that is not a retry, so an older series of retries stops. */
+  let series = 0;
   // Mounts, refreshes and teardown run one after another, never interleaved.
   let queue: Promise<void> = Promise.resolve();
   const enqueue = (task: () => Promise<void>) => {
@@ -114,13 +124,23 @@ export function mountStory(
     await previous?.().catch(() => undefined);
   };
 
-  const load = async (initial: boolean) => {
+  const retryLater = (initial: boolean, attempt: number, id: number) => {
+    const delay = RETRY_DELAYS[attempt];
+    if (delay === undefined || disposed || id !== series) return;
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => {
+      void enqueue(() => (id === series ? load(initial, attempt + 1, id) : Promise.resolve()));
+    }, delay);
+  };
+
+  const load = async (initial: boolean, attempt = 0, id = ++series) => {
     if (disposed) return;
     let story: PreparedStoryLike;
     try {
       story = await preview.loadStory({ storyId });
     } catch (error) {
       if (disposed) return;
+      retryLater(initial, attempt, id);
       if (isMissingStoryError(error)) {
         await unrender();
         current = undefined;
@@ -142,6 +162,7 @@ export function mountStory(
     refresh: () => enqueue(() => load(false)),
     teardown: () => {
       disposed = true;
+      clearTimeout(retryTimer);
       return enqueue(unrender);
     },
   };

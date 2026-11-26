@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   type PreparedStoryLike,
   type PreviewLike,
+  RETRY_DELAYS,
   type StoryStatus,
   isMissingStoryError,
   mountStory,
@@ -205,5 +206,63 @@ describe('isMissingStoryError', () => {
     expect(isMissingStoryError(new Error('Failed to fetch'))).toBe(false);
     expect(isMissingStoryError('nope')).toBe(false);
     expect(isMissingStoryError(null)).toBe(false);
+  });
+});
+
+describe('mountStory retries a failed load', () => {
+  const flush = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+
+  it('renders a story that reappears after a refresh first found it missing (deleted file restored)', async () => {
+    vi.useFakeTimers();
+    try {
+      const story = storyOf();
+      let answer: PreparedStoryLike | Error = story;
+      const { preview, log } = fakePreview(() => answer);
+      const statuses: string[] = [];
+      const mount = mountStory(preview, story.id, element, (status) => statuses.push(status.kind));
+      await vi.advanceTimersByTimeAsync(0);
+      answer = missingError();
+      void mount.refresh();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(statuses.at(-1)).toBe('missing');
+      // The file is back, but nothing tells the board again.
+      answer = story;
+      await vi.advanceTimersByTimeAsync(RETRY_DELAYS[0]!);
+      await flush();
+      expect(statuses.at(-1)).toBe('ready');
+      expect(log.filter((line) => line.startsWith('render'))).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a failed first load, then gives up', async () => {
+    vi.useFakeTimers();
+    try {
+      const { preview, log } = fakePreview(() => new TypeError('importers[path] is not a function'));
+      const statuses: string[] = [];
+      mountStory(preview, 'example-button--primary', element, (status) => statuses.push(status.kind));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(log.filter((line) => line.startsWith('load'))).toHaveLength(1 + RETRY_DELAYS.length);
+      expect(statuses.at(-1)).toBe('error');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stops retrying after teardown', async () => {
+    vi.useFakeTimers();
+    try {
+      const { preview, log } = fakePreview(() => missingError());
+      const mount = mountStory(preview, 'example-button--primary', element, () => undefined);
+      await vi.advanceTimersByTimeAsync(0);
+      await mount.teardown();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(log.filter((line) => line.startsWith('load'))).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
