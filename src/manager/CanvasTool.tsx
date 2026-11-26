@@ -11,6 +11,7 @@ import { addons, useStorybookApi, useStorybookState } from 'storybook/manager-ap
 
 import { canvasStoryId } from '../canvas-entry';
 import { type CanvasSummary, type ChannelLike, type InvalidCanvas, requestCanvas } from '../channel';
+import { waitForEntryReady } from '../entry-ready';
 import { CanvasDeleteDialog, CanvasNameDialog } from './CanvasDialogs';
 import { CanvasMenu } from './CanvasMenu';
 import { leaveCanvas, openCanvas } from './navigation';
@@ -89,7 +90,8 @@ export function CanvasTool() {
         onOpenChange={close}
         onSubmit={async (name) => {
           const canvas = await requestCanvas(channel, 'create', { name });
-          void openCanvas(api, canvas.id);
+          // Open it once the preview can load it, so Storybook never shows its error page for it.
+          void openCanvas(api, canvas.id, { ready: (storyId) => waitForEntryReady(channel, storyId) });
         }}
       />
       <CanvasNameDialog

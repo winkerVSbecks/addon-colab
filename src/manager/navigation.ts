@@ -32,12 +32,24 @@ function hasEntry(api: NavigationApi, storyId: string): boolean {
   }
 }
 
-/** Opens a canvas once its entry is in the index. Resolves `false` if it did not appear in time. */
-export async function openCanvas(api: NavigationApi, fileId: string, timeoutMs = 10_000): Promise<boolean> {
+/**
+ * Opens a canvas once its entry is in the index. Resolves `false` if it did not appear in time.
+ *
+ * `ready`, when given, is awaited between the two: for a new canvas the manager's index can have the
+ * entry before the preview can load it (see `src/entry-ready.ts`). Whatever it resolves to, or if it
+ * throws, the canvas is opened anyway.
+ */
+export async function openCanvas(
+  api: NavigationApi,
+  fileId: string,
+  { timeoutMs = 10_000, ready }: { timeoutMs?: number; ready?: (storyId: string) => Promise<unknown> } = {},
+): Promise<boolean> {
   const storyId = canvasStoryId(fileId);
   const found = await waitFor(() => hasEntry(api, storyId), timeoutMs);
-  if (found) api.selectStory(storyId);
-  return found;
+  if (!found) return false;
+  await ready?.(storyId).catch(() => undefined);
+  api.selectStory(storyId);
+  return true;
 }
 
 /** Whether the canvas with this file id is the page being shown. */
