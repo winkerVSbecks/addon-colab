@@ -1,6 +1,6 @@
 {
   "name": "storybook-addon-colab",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Lay out live stories on a canvas, pin comments to DOM elements, draw on top, and let a coding agent read and reply over MCP",
   "keywords": [
     "storybook-addon",
@@ -14,7 +14,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/winkervsbecks/addon-colab"
+    "url": "git+https://github.com/winkervsbecks/addon-colab.git"
   },
   "bugs": "https://github.com/winkervsbecks/addon-colab/issues",
   "license": "MIT",
@@ -36,6 +36,7 @@
   "files": [
     "dist/**/*",
     "README.md",
+    "CHANGELOG.md",
     "manager.js",
     "preset.js",
     "preview.js"
