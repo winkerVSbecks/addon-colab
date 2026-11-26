@@ -1,6 +1,7 @@
 // Regenerates the README screenshots in assets/screenshots/ from the real addon in a real Storybook.
 //
-//   pnpm screenshots                    # starts its own Storybook, writes assets/screenshots/*.png
+//   pnpm screenshots                    # starts its own Storybook, writes assets/screenshots/*.png and commenting.gif
+//   ONLY=commenting pnpm screenshots    # only some of them (comma-separated names)
 //   SB=http://127.0.0.1:6247 CANVAS_DIR=<its canvas dir> node scripts/readme-screenshots.mjs
 //
 // Without $SB it starts `storybook dev` with scripts/screenshot-storybook (the addon loaded from
@@ -14,9 +15,10 @@
 // (/colab/mcp). Screenshots are taken at 1440×900, device scale factor 2, then scaled to 1600 px
 // wide. Optimise them afterwards, for example with `npx -y pngquant-bin` and `npx -y oxipng`
 // (see the README's Development section).
-import { spawn } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -33,6 +35,12 @@ const VIEW = { x: 40, y: 100, zoom: 0.8 };
 /** Detail shots show this part of the window (CSS pixels); every image is scaled to 1600×1000. */
 const DETAIL = { x: 300, y: 40, width: 1120, height: 700 };
 const OUTPUT_WIDTH = 1600;
+/** The stories on the canvas, in world pixels. */
+const FRAMES = {
+  header: { storyId: 'example-header--logged-out', x: 0, y: 0, width: 960 },
+  button: { storyId: 'example-button--primary', x: 1020, y: 0, width: 300 },
+  page: { storyId: 'example-page--logged-in', x: 0, y: 170, width: 960 },
+};
 
 // ---------------------------------------------------------------------------------------------
 // Storybook
@@ -266,9 +274,240 @@ async function shot(page, name, clip) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The commenting GIF (assets/screenshots/commenting.gif)
+//
+// Recorded with Chrome's screencast (CDP Page.startScreencast, PNG frames with timestamps) while the
+// pointer and keyboard move at a human pace. Headless Chrome draws no pointer, so the recording page
+// gets a cursor overlay in Storybook's top document (never in the addon). ffmpeg (on $PATH, or
+// $FFMPEG) turns the frames into a looping GIF; the command is in `encodeGif` below.
+
+const GIF_VIEWPORT = { width: 1280, height: 800 };
+const GIF_VIEW = { x: 6, y: 90, zoom: 0.72 };
+const GIF_WIDTH = 1040;
+const GIF_FPS = 14;
+
+/** Puts an arrow cursor (and a click ring) in Storybook's top document; returns its controller. */
+async function addCursor(page) {
+  await page.evaluate(() => {
+    const cursor = document.createElement('div');
+    cursor.id = 'readme-cursor';
+    cursor.innerHTML =
+      '<svg width="22" height="28" viewBox="0 0 22 28"><path d="M2 2 L2 22 L7.5 17 L11 25.5 L14.5 24 L11 15.8 L18.5 15.8 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>' +
+      '<span></span>';
+    Object.assign(cursor.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      zIndex: '2147483647',
+      pointerEvents: 'none',
+      filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,.35))',
+    });
+    const ring = cursor.querySelector('span');
+    Object.assign(ring.style, {
+      position: 'absolute',
+      left: '-14px',
+      top: '-14px',
+      width: '28px',
+      height: '28px',
+      borderRadius: '50%',
+      background: 'rgba(2,156,253,.28)',
+      transform: 'scale(0)',
+      transition: 'transform 180ms ease-out, opacity 260ms ease-out',
+      opacity: '0',
+    });
+    cursor.querySelector('svg').style.position = 'relative';
+    document.body.append(cursor);
+  });
+  let at = { x: GIF_VIEWPORT.width / 2, y: GIF_VIEWPORT.height / 2 };
+  const place = (x, y) =>
+    page.evaluate(
+      ({ x, y }) => (document.getElementById('readme-cursor').style.transform = `translate(${x - 2}px, ${y - 2}px)`),
+      { x, y },
+    );
+  await page.mouse.move(at.x, at.y);
+  await place(at.x, at.y);
+  return {
+    /** Moves the pointer to (x, y) over `ms`, eased, with real mouse events all the way. */
+    async glide(x, y, ms) {
+      const from = at;
+      const start = Date.now();
+      for (;;) {
+        const t = Math.min(1, (Date.now() - start) / ms);
+        const e = t < 0.5 ? 4 * t ** 3 : 1 - (-2 * t + 2) ** 3 / 2;
+        const px = from.x + (x - from.x) * e;
+        const py = from.y + (y - from.y) * e;
+        await page.mouse.move(px, py);
+        await place(px, py);
+        if (t === 1) break;
+        await wait(12);
+      }
+      at = { x, y };
+    },
+    async click() {
+      await page.evaluate(() => {
+        const ring = document.querySelector('#readme-cursor span');
+        ring.style.transition = 'none';
+        ring.style.transform = 'scale(0.3)';
+        ring.style.opacity = '1';
+        ring.getBoundingClientRect();
+        ring.style.transition = 'transform 220ms ease-out, opacity 320ms ease-out 120ms';
+        ring.style.transform = 'scale(1)';
+        ring.style.opacity = '0';
+      });
+      await page.mouse.down();
+      await wait(70);
+      await page.mouse.up();
+    },
+  };
+}
+
+async function boxCentre(locator) {
+  const box = await locator.boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+}
+
+/** Writes the frames to a temporary folder and encodes them into a looping GIF with ffmpeg. */
+function encodeGif(frames, path, holdLast) {
+  const dir = mkdtempSync(join(tmpdir(), 'readme-gif-'));
+  try {
+    const lines = [];
+    frames.forEach((frame, i) => {
+      const file = join(dir, `f${String(i).padStart(4, '0')}.png`);
+      writeFileSync(file, frame.data);
+      const next = frames[i + 1]?.time ?? frame.time + holdLast;
+      lines.push(`file '${file}'`, `duration ${Math.max(0.001, next - frame.time).toFixed(4)}`);
+    });
+    lines.push(`file '${join(dir, `f${String(frames.length - 1).padStart(4, '0')}.png`)}'`);
+    writeFileSync(join(dir, 'frames.txt'), lines.join('\n') + '\n');
+    // Constant frame rate, Lanczos downscale, then one palette for the whole clip (stats_mode=diff
+    // favours what changes: highlight, pins, text) with light ordered dithering, and only changed
+    // rectangles re-dithered so the static UI does not shimmer.
+    execFileSync(
+      process.env.FFMPEG ?? 'ffmpeg',
+      [
+        '-y',
+        '-loglevel',
+        'error',
+        '-f',
+        'concat',
+        '-safe',
+        '0',
+        '-i',
+        join(dir, 'frames.txt'),
+        '-vf',
+        `fps=${GIF_FPS},scale=${GIF_WIDTH}:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=160:stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle`,
+        '-loop',
+        '0',
+        path,
+      ],
+      { stdio: 'inherit' },
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function recordCommenting() {
+  const browser = await chromium.launch({ executablePath: CHROME, headless: true });
+  try {
+    const context = await browser.newContext({ viewport: GIF_VIEWPORT, deviceScaleFactor: 2, colorScheme: 'light' });
+    const page = await context.newPage();
+    // A fresh canvas with the three stories and no comments.
+    await page.goto(`${SB}/?path=/story/example-button--primary`);
+    await page.waitForSelector('button[aria-label="Canvases"]');
+    const existing = await storeOp(page, 'list', {});
+    if (existing.canvases?.some((canvas) => canvas.id === CANVAS_ID)) await storeOp(page, 'delete', { id: CANVAS_ID });
+    await storeOp(page, 'create', { name: CANVAS_NAME, id: CANVAS_ID });
+    const placed = {};
+    for (const [key, frame] of Object.entries(FRAMES))
+      placed[key] = (await storeOp(page, 'addFrame', { canvasId: CANVAS_ID, frame })).frame.id;
+    await setView(page, GIF_VIEW);
+    await page.goto(`${SB}/?path=/story/colab-canvas-${CANVAS_ID}--canvas`);
+    await waitForBoard(page, 3);
+    const board = preview(page);
+    await page.mouse.click(GIF_VIEWPORT.width - 100, GIF_VIEWPORT.height - 160);
+    await wait(500);
+    const cursor = await addCursor(page);
+
+    const frames = [];
+    const t0 = Date.now();
+    const mark = (label) =>
+      process.env.GIF_DEBUG && console.log(`    ${((Date.now() - t0) / 1000).toFixed(2)}s ${label}`);
+    const cdp = await context.newCDPSession(page);
+    cdp.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
+      frames.push({ data: Buffer.from(data, 'base64'), time: metadata.timestamp });
+      cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+    });
+    await cdp.send('Page.startScreencast', { format: 'png', everyNthFrame: 1 });
+    await wait(400);
+
+    // Comment mode from the board's toolbar.
+    await cursor.glide(...Object.values(await boxCentre(board.locator('button[data-colab-mode="comment"]'))), 750);
+    await cursor.click();
+    mark('comment mode');
+    await wait(250);
+    // Sweep across the stories: the highlight and its label follow the pointer.
+    const logo = await elementRect(page, placed.header, 'h1');
+    await cursor.glide(logo.x + logo.width / 2, logo.y + logo.height / 2, 600);
+    await wait(200);
+    const logIn = await elementRect(page, placed.header, 'button.storybook-button--secondary');
+    await cursor.glide(logIn.x + logIn.width / 2, logIn.y + logIn.height / 2, 600);
+    await wait(200);
+    const signUp = await elementRect(page, placed.header, 'button.storybook-button--primary');
+    await cursor.glide(signUp.x + signUp.width / 2, signUp.y + signUp.height / 2, 350);
+    await wait(350);
+    // Pin a comment to Sign up.
+    await cursor.click();
+    mark('click sign up');
+    const draft = board.locator('[data-colab-draft] textarea');
+    await draft.waitFor();
+    await wait(250);
+    await draft.pressSequentially('Brand purple here?', { delay: 45 });
+    await wait(300);
+    await cursor.glide(...Object.values(await boxCentre(board.locator('[data-colab-draft] [data-colab-submit]'))), 550);
+    await cursor.click();
+    await board.locator('[data-colab-draft]').waitFor({ state: 'detached' });
+    mark('submitted');
+    await wait(350);
+    // Open the new pin's thread; the agent's reply arrives over MCP.
+    const { comments } = await mcp('list_canvas_comments', { canvasId: CANVAS_ID, status: 'open' });
+    const pin = board.locator(`[data-colab-pin="${comments[0].commentId}"]`);
+    await cursor.glide(...Object.values(await boxCentre(pin)), 450);
+    await cursor.click();
+    await board.locator('[data-colab-thread]').waitFor();
+    mark('thread open');
+    // The thread shows the comment alone for a moment, then the reply arrives.
+    await cursor.glide(GIF_VIEWPORT.width - 140, GIF_VIEWPORT.height - 260, 500);
+    await wait(150);
+    await mcp('reply_to_canvas_comment', {
+      canvasId: CANVAS_ID,
+      commentId: comments[0].commentId,
+      body: 'Sure: I’ll add a brand variant to Button and use it in Header.tsx.',
+    });
+    mark('reply sent');
+    await wait(900);
+    await cdp.send('Page.stopScreencast');
+    encodeGif(frames, join(OUT, 'commenting.gif'), 1.2);
+    console.log(`  commenting.gif (${frames.length} frames captured)`);
+  } finally {
+    await browser.close();
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Scene
 
 mkdirSync(OUT, { recursive: true });
+const wants = (name) => !ONLY || ONLY.includes(name);
+const STILLS = ['hero', 'hero-dark', 'canvases-menu', 'draw-mode', 'comment-thread'];
+if (!STILLS.some(wants)) {
+  try {
+    if (wants('commenting')) await recordCommenting();
+  } finally {
+    stopServer();
+  }
+  process.exit(0);
+}
 const { browser, page } = await launch('light');
 try {
   await page.goto(`${SB}/?path=/story/example-button--primary`);
@@ -288,11 +527,7 @@ try {
 
   // 2. Place the stories.
   const placed = {};
-  for (const [key, frame] of Object.entries({
-    header: { storyId: 'example-header--logged-out', x: 0, y: 0, width: 960 },
-    button: { storyId: 'example-button--primary', x: 1020, y: 0, width: 300 },
-    page: { storyId: 'example-page--logged-in', x: 0, y: 170, width: 960 },
-  }))
+  for (const [key, frame] of Object.entries(FRAMES))
     placed[key] = (await storeOp(page, 'addFrame', { canvasId: CANVAS_ID, frame })).frame.id;
   await setView(page, VIEW);
   await page.reload();
@@ -304,7 +539,6 @@ try {
   const target = await elementRect(page, placed.header, 'button.storybook-button--primary');
   await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 8 });
   await board.locator('[data-colab-hover]').waitFor();
-  await shot(page, 'comment-mode', DETAIL);
   await page.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
   const draft = board.locator('[data-colab-draft] textarea');
   await draft.waitFor();
@@ -381,6 +615,9 @@ try {
   await wait(1500);
   await shot(dark.page, 'hero-dark');
   await dark.browser.close();
+
+  // 9. The commenting GIF, on a fresh copy of the canvas.
+  if (wants('commenting')) await recordCommenting();
 } finally {
   await browser.close().catch(() => {});
   stopServer();
