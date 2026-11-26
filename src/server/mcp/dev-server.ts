@@ -9,7 +9,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { isValidHost } from 'storybook/internal/core-server';
 import type { Options } from 'storybook/internal/types';
 
-import { version } from '../../../package.json';
+import packageJson from '../../../package.json' with { type: 'json' };
 import { getCanvasStore } from '../canvas-store';
 import type { StoryInfo, StoryLookup } from './format';
 import { COLAB_MCP_ENDPOINT, createMcpRequestHandler } from './http';
@@ -55,7 +55,7 @@ export async function registerColabMcp(app: DevServerApp, options: Options, { di
     createMcpRequestHandler({
       store,
       stories,
-      version,
+      version: packageJson.version,
       isAllowedOriginHost: (host) => isValidHost(host, hostOptions),
     }),
   );
