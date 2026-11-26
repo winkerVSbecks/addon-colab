@@ -31,6 +31,6 @@ The first pre-release. Install it with `npm install -D storybook-addon-colab@nex
 - Only one dev server should use a canvas folder at a time.
 - Adding a comment and moving or resizing a story can't be undone. Commenting needs a pointer.
 
-See [Known limitations](https://github.com/winkervsbecks/addon-colab#known-limitations) and [How comment pins find their element](https://github.com/winkervsbecks/addon-colab#how-comment-pins-find-their-element-and-when-they-dont) in the README for the full list.
+See [Known limitations](https://github.com/winkerVSbecks/addon-colab#known-limitations) and [How comment pins find their element](https://github.com/winkerVSbecks/addon-colab#how-comment-pins-find-their-element-and-when-they-dont) in the README for the full list.
 
-[0.1.0]: https://github.com/winkervsbecks/addon-colab/releases/tag/v0.1.0
+[0.1.0]: https://github.com/winkerVSbecks/addon-colab/releases/tag/v0.1.0
