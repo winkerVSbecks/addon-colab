@@ -139,7 +139,9 @@ export interface CanvasOperations {
    * sizes. Kept in the dev server's memory only: never written to the canvas file and no change
    * event. `null` forgets a frame's height (its story is missing or failed to render). Heights for
    * frames not in `heights` are kept, unless `replace` is true (a board's first report after it
-   * mounts), which forgets every height reported before.
+   * mounts), which forgets every height reported before. Fails with `NOT_FOUND` when the canvas has
+   * no file; frame ids that are not on the canvas are ignored. Heights are dropped when their frame
+   * is removed or the canvas is deleted (also by hand).
    */
   reportRenderedHeights: {
     args: { canvasId: string; heights: Record<string, number | null>; replace?: boolean };

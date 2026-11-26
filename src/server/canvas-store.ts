@@ -160,6 +160,7 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
   const pathOf = (id: string) => join(dir, `${id}${FILE_SUFFIX}`);
 
   function emit(event: CanvasChangeEvent) {
+    pruneRendered(event);
     for (const listener of listeners) {
       try {
         listener(event);
@@ -167,6 +168,22 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
         console.error('[addon-colab] canvas change listener failed', error);
       }
     }
+  }
+
+  /**
+   * Keeps rendered heights to frames that exist: a deleted or invalid canvas forgets all of them,
+   * a changed one forgets frames it no longer has.
+   */
+  function pruneRendered(event: CanvasChangeEvent) {
+    const heights = rendered.get(event.id);
+    if (!heights) return;
+    if (event.type !== 'changed') {
+      rendered.delete(event.id);
+      return;
+    }
+    const frameIds = new Set(event.canvas.frames.map((frame) => frame.id));
+    for (const frameId of heights.keys()) if (!frameIds.has(frameId)) heights.delete(frameId);
+    if (heights.size === 0) rendered.delete(event.id);
   }
 
   /** Runs `task` after every earlier task for the same canvas has finished. */
@@ -666,14 +683,21 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
     async reportRenderedHeights({ canvasId, heights, replace }) {
       assertCanvasId(canvasId);
       const input = parseInput(renderedHeightsSchema, heights, 'heights');
-      const current = (replace === true ? undefined : rendered.get(canvasId)) ?? new Map<string, number>();
-      for (const [frameId, height] of Object.entries(input)) {
-        if (height === null) current.delete(frameId);
-        else if (current.size < MAX_RENDERED_HEIGHTS || current.has(frameId)) current.set(frameId, Math.round(height));
-      }
-      if (current.size) rendered.set(canvasId, current);
-      else rendered.delete(canvasId);
-      return { canvasId };
+      // Under the canvas lock, so a delete or frame removal cannot slip in between the read and the update.
+      return withLock(canvasId, async () => {
+        // Only canvases that have a valid file, and only their frames: made-up ids store nothing.
+        const { canvas } = await load(canvasId);
+        const frameIds = new Set(canvas.frames.map((frame) => frame.id));
+        const current = (replace === true ? undefined : rendered.get(canvasId)) ?? new Map<string, number>();
+        for (const frameId of current.keys()) if (!frameIds.has(frameId)) current.delete(frameId);
+        for (const [frameId, height] of Object.entries(input)) {
+          if (height === null) current.delete(frameId);
+          else if (frameIds.has(frameId)) current.set(frameId, Math.round(height));
+        }
+        if (current.size) rendered.set(canvasId, current);
+        else rendered.delete(canvasId);
+        return { canvasId };
+      });
     },
 
     renderedHeights(canvasId) {

@@ -713,14 +713,29 @@ describe('rendered heights', () => {
     rec.unsubscribe();
   });
 
-  it('merges reports, forgets a frame on null and clears on delete', async () => {
+  /** A canvas called "board" with frames `a`, `b` and `c` (their real ids). */
+  async function boardWithFrames() {
     await store.create({ name: 'Board' });
-    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: 68, b: 63 } });
-    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: null, c: 400 } });
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { frame } = await store.addFrame({
+        canvasId: 'board',
+        frame: { storyId: 'example-button--primary', x: i * 300, y: 0, width: 240 },
+      });
+      ids.push(frame.id);
+    }
+    const [a, b, c] = ids as [string, string, string];
+    return { a, b, c };
+  }
+
+  it('merges reports, forgets a frame on null and clears on delete', async () => {
+    const { a, b, c } = await boardWithFrames();
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [a]: 68, [b]: 63 } });
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [a]: null, [c]: 400 } });
     expect(store.renderedHeights('board')).toEqual(
       new Map([
-        ['b', 63],
-        ['c', 400],
+        [b, 63],
+        [c, 400],
       ]),
     );
     await store.delete({ id: 'board' });
@@ -728,18 +743,80 @@ describe('rendered heights', () => {
   });
 
   it('forgets earlier heights on a replacing report', async () => {
-    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: 68, b: 63 } });
-    await store.reportRenderedHeights({ canvasId: 'board', heights: { c: 10 }, replace: true });
-    expect(store.renderedHeights('board')).toEqual(new Map([['c', 10]]));
+    const { a, b, c } = await boardWithFrames();
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [a]: 68, [b]: 63 } });
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [c]: 10 }, replace: true });
+    expect(store.renderedHeights('board')).toEqual(new Map([[c, 10]]));
     await store.reportRenderedHeights({ canvasId: 'board', heights: {}, replace: true });
     expect(store.renderedHeights('board').size).toBe(0);
   });
 
   it('returns a copy, and an empty map for an unknown canvas', async () => {
-    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: 68 } });
-    (store.renderedHeights('board') as Map<string, number>).set('a', 1);
-    expect(store.renderedHeights('board').get('a')).toBe(68);
+    const { a } = await boardWithFrames();
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [a]: 68 } });
+    (store.renderedHeights('board') as Map<string, number>).set(a, 1);
+    expect(store.renderedHeights('board').get(a)).toBe(68);
     expect(store.renderedHeights('other').size).toBe(0);
+  });
+
+  it('stores nothing for a canvas that has no file, or an invalid one', async () => {
+    await expectStoreError(store.reportRenderedHeights({ canvasId: 'made-up', heights: { a: 68 } }), 'NOT_FOUND');
+    expect(store.renderedHeights('made-up').size).toBe(0);
+    await writeFile(fileOf('broken'), '{ not json');
+    await expectStoreError(store.reportRenderedHeights({ canvasId: 'broken', heights: { a: 68 } }), 'INVALID_FILE');
+    expect(store.renderedHeights('broken').size).toBe(0);
+  });
+
+  it('ignores frame ids that are not on the canvas', async () => {
+    const { a } = await boardWithFrames();
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [a]: 68, 'frame-made-up': 90, x: 1 } });
+    expect(store.renderedHeights('board')).toEqual(new Map([[a, 68]]));
+  });
+
+  it('forgets a removed frame, and every height when the file is deleted by hand', async () => {
+    const { a, b } = await boardWithFrames();
+    await store.watch();
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [a]: 68, [b]: 63 } });
+    await store.removeFrame({ canvasId: 'board', frameId: a });
+    expect(store.renderedHeights('board')).toEqual(new Map([[b, 63]]));
+    const rec = recorder(store);
+    const deleted = rec.next((event) => event.type === 'deleted');
+    await unlink(fileOf('board'));
+    await deleted;
+    expect(store.renderedHeights('board').size).toBe(0);
+    rec.unsubscribe();
+  });
+
+  it('forgets frames removed by a hand edit', async () => {
+    const { a, b } = await boardWithFrames();
+    await store.watch();
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { [a]: 68, [b]: 63 } });
+    const canvas = await store.get({ id: 'board' });
+    const rec = recorder(store);
+    const changed = rec.next((event) => event.type === 'changed');
+    await writeFile(
+      fileOf('board'),
+      serializeCanvasFile({ ...canvas, frames: canvas.frames.filter((frame) => frame.id !== a) }),
+    );
+    await changed;
+    expect(store.renderedHeights('board')).toEqual(new Map([[b, 63]]));
+    rec.unsubscribe();
+  });
+
+  it('stays bounded under a flood of made-up canvases and frames', async () => {
+    const { a } = await boardWithFrames();
+    const madeUp = (n: number) => Object.fromEntries(Array.from({ length: 999 }, (_, i) => [`frame-${n}-${i}`, 50]));
+    const results = await Promise.allSettled(
+      Array.from({ length: 300 }, (_, n) =>
+        store.reportRenderedHeights({ canvasId: `made-up-${n}`, heights: madeUp(n) }),
+      ),
+    );
+    expect(results.every((result) => result.status === 'rejected')).toBe(true);
+    for (let n = 0; n < 50; n++) {
+      await store.reportRenderedHeights({ canvasId: 'board', heights: { ...madeUp(n), [a]: 68 } });
+    }
+    for (let n = 0; n < 300; n++) expect(store.renderedHeights(`made-up-${n}`).size).toBe(0);
+    expect(store.renderedHeights('board')).toEqual(new Map([[a, 68]]));
   });
 
   it('rejects malformed reports', async () => {
