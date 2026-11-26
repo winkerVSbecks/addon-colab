@@ -17,10 +17,17 @@ export interface StoryInfo {
 export type StoryLookup = (storyId: string) => StoryInfo | undefined;
 
 /**
- * Frames without a stored height size to their rendered content, which the server cannot measure.
- * For overlap checks they are assumed to be this tall; results say when this was assumed.
+ * Frames size to their rendered content, which the server cannot measure itself. An open board
+ * reports the heights it draws frames at (`store.renderedHeights`); those are used when known.
+ * Otherwise a frame's stored height (the minimum the user resized it to) is used, and failing
+ * that it is assumed to be this tall. Results say when a height was assumed.
  */
 export const ASSUMED_FRAME_HEIGHT = 400;
+
+/** Heights the board last drew frames at, by frame id (`CanvasStore.renderedHeights`). */
+export type RenderedHeights = ReadonlyMap<string, number>;
+
+const NO_HEIGHTS: RenderedHeights = new Map();
 
 interface Rect {
   x: number;
@@ -39,8 +46,10 @@ export interface FrameSummary {
   x: number;
   y: number;
   width: number;
-  /** Absent: the frame sizes to its content. */
+  /** The minimum height the user resized the frame to. Absent: the frame sizes to its content. */
   height?: number;
+  /** How tall the board last drew the frame (content or `height`, whichever is taller), when known. */
+  renderedHeight?: number;
 }
 
 export interface FrameRef {
@@ -115,13 +124,14 @@ export interface StrokeSummary {
   points?: Point[];
 }
 
-export function frameRect(frame: Frame): Rect & { heightAssumed: boolean } {
+export function frameRect(frame: Frame, heights: RenderedHeights = NO_HEIGHTS): Rect & { heightAssumed: boolean } {
+  const rendered = heights.get(frame.id);
   return {
     x: frame.x,
     y: frame.y,
     width: frame.width,
-    height: frame.height ?? ASSUMED_FRAME_HEIGHT,
-    heightAssumed: frame.height === undefined,
+    height: rendered ?? frame.height ?? ASSUMED_FRAME_HEIGHT,
+    heightAssumed: rendered === undefined && frame.height === undefined,
   };
 }
 
@@ -162,8 +172,9 @@ function frameRef(frame: Frame, lookup: StoryLookup): FrameRef {
   return { frameId: frame.id, storyId: frame.storyId, ...(storyFile ? { storyFile } : {}) };
 }
 
-export function summarizeFrame(frame: Frame, lookup: StoryLookup): FrameSummary {
+export function summarizeFrame(frame: Frame, lookup: StoryLookup, heights: RenderedHeights = NO_HEIGHTS): FrameSummary {
   const story = lookup(frame.storyId);
+  const renderedHeight = heights.get(frame.id);
   return {
     frameId: frame.id,
     storyId: frame.storyId,
@@ -172,10 +183,16 @@ export function summarizeFrame(frame: Frame, lookup: StoryLookup): FrameSummary 
     y: frame.y,
     width: frame.width,
     ...(frame.height !== undefined ? { height: frame.height } : {}),
+    ...(renderedHeight !== undefined ? { renderedHeight } : {}),
   };
 }
 
-export function describeAnchor(anchor: Anchor, canvas: CanvasFile, lookup: StoryLookup): CommentLocation {
+export function describeAnchor(
+  anchor: Anchor,
+  canvas: CanvasFile,
+  lookup: StoryLookup,
+  heights: RenderedHeights = NO_HEIGHTS,
+): CommentLocation {
   switch (anchor.type) {
     case 'element': {
       const { target } = anchor;
@@ -211,13 +228,18 @@ export function describeAnchor(anchor: Anchor, canvas: CanvasFile, lookup: Story
         x: anchor.x,
         y: anchor.y,
         insideFrames: canvas.frames
-          .filter((frame) => contains(frameRect(frame), anchor.x, anchor.y))
+          .filter((frame) => contains(frameRect(frame, heights), anchor.x, anchor.y))
           .map((frame) => frameRef(frame, lookup)),
       };
   }
 }
 
-export function summarizeComment(comment: Comment, canvas: CanvasFile, lookup: StoryLookup): CommentSummary {
+export function summarizeComment(
+  comment: Comment,
+  canvas: CanvasFile,
+  lookup: StoryLookup,
+  heights: RenderedHeights = NO_HEIGHTS,
+): CommentSummary {
   return {
     canvasId: canvas.id,
     commentId: comment.id,
@@ -226,7 +248,7 @@ export function summarizeComment(comment: Comment, canvas: CanvasFile, lookup: S
     body: comment.body,
     createdAt: comment.createdAt,
     ...(comment.resolvedAt ? { resolvedAt: comment.resolvedAt } : {}),
-    location: describeAnchor(comment.anchor, canvas, lookup),
+    location: describeAnchor(comment.anchor, canvas, lookup, heights),
     replies: comment.replies.map((reply) => ({
       replyId: reply.id,
       author: reply.author,
@@ -240,13 +262,13 @@ export function summarizeStroke(
   stroke: Stroke,
   canvas: CanvasFile,
   lookup: StoryLookup,
-  { includePoints = false }: { includePoints?: boolean } = {},
+  { includePoints = false, heights = NO_HEIGHTS }: { includePoints?: boolean; heights?: RenderedHeights } = {},
 ): StrokeSummary {
   const bounds = boundsOf(stroke.points);
   const margin = stroke.width / 2;
   const frames: StrokeSummary['frames'] = [];
   for (const frame of canvas.frames) {
-    const rect = frameRect(frame);
+    const rect = frameRect(frame, heights);
     const inside = stroke.points.filter(([x, y]) => contains(rect, x, y, margin)).length;
     let relation: StrokeRelation | undefined;
     if (inside === stroke.points.length) {
@@ -281,29 +303,32 @@ export interface CanvasDetails {
   frames: FrameSummary[];
   comments: CommentSummary[];
   strokes: StrokeSummary[];
-  /** Present when some frame has no stored height, so overlap results for it are estimates. */
+  /** Present when some frame's height is not known, so overlap results for it are estimates. */
   note?: string;
 }
 
 export function summarizeCanvas(
   canvas: CanvasFile,
   lookup: StoryLookup,
-  { includeStrokePoints = false }: { includeStrokePoints?: boolean } = {},
+  {
+    includeStrokePoints = false,
+    heights = NO_HEIGHTS,
+  }: { includeStrokePoints?: boolean; heights?: RenderedHeights } = {},
 ): CanvasDetails {
-  const anyAssumed = canvas.frames.some((frame) => frame.height === undefined);
+  const anyAssumed = canvas.frames.some((frame) => frameRect(frame, heights).heightAssumed);
   return {
     canvasId: canvas.id,
     name: canvas.name,
     createdAt: canvas.createdAt,
     updatedAt: canvas.updatedAt,
-    frames: canvas.frames.map((frame) => summarizeFrame(frame, lookup)),
-    comments: canvas.comments.map((comment) => summarizeComment(comment, canvas, lookup)),
+    frames: canvas.frames.map((frame) => summarizeFrame(frame, lookup, heights)),
+    comments: canvas.comments.map((comment) => summarizeComment(comment, canvas, lookup, heights)),
     strokes: canvas.strokes.map((stroke) =>
-      summarizeStroke(stroke, canvas, lookup, { includePoints: includeStrokePoints }),
+      summarizeStroke(stroke, canvas, lookup, { includePoints: includeStrokePoints, heights }),
     ),
     ...(anyAssumed
       ? {
-          note: `Frames without a height size to their content; overlap checks assume they are ${ASSUMED_FRAME_HEIGHT}px tall.`,
+          note: `Some frames have no known height (open the canvas in Storybook to measure them); overlap checks assume they are ${ASSUMED_FRAME_HEIGHT}px tall.`,
         }
       : {}),
   };

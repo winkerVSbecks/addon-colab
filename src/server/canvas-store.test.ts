@@ -693,3 +693,66 @@ describe('change events', () => {
     });
   });
 });
+
+describe('rendered heights', () => {
+  it('keeps reported heights in memory without touching the file or emitting a change', async () => {
+    await store.create({ name: 'Board' });
+    const { frame } = await store.addFrame({
+      canvasId: 'board',
+      frame: { storyId: 'example-button--primary', x: 0, y: 0, width: 240 },
+    });
+    const before = await readCanvasText('board');
+    const rec = recorder(store);
+    tick();
+    expect(await store.reportRenderedHeights({ canvasId: 'board', heights: { [frame.id]: 67.6 } })).toEqual({
+      canvasId: 'board',
+    });
+    expect(store.renderedHeights('board')).toEqual(new Map([[frame.id, 68]]));
+    expect(await readCanvasText('board')).toBe(before);
+    expect(rec.events).toEqual([]);
+    rec.unsubscribe();
+  });
+
+  it('merges reports, forgets a frame on null and clears on delete', async () => {
+    await store.create({ name: 'Board' });
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: 68, b: 63 } });
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: null, c: 400 } });
+    expect(store.renderedHeights('board')).toEqual(
+      new Map([
+        ['b', 63],
+        ['c', 400],
+      ]),
+    );
+    await store.delete({ id: 'board' });
+    expect(store.renderedHeights('board').size).toBe(0);
+  });
+
+  it('forgets earlier heights on a replacing report', async () => {
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: 68, b: 63 } });
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { c: 10 }, replace: true });
+    expect(store.renderedHeights('board')).toEqual(new Map([['c', 10]]));
+    await store.reportRenderedHeights({ canvasId: 'board', heights: {}, replace: true });
+    expect(store.renderedHeights('board').size).toBe(0);
+  });
+
+  it('returns a copy, and an empty map for an unknown canvas', async () => {
+    await store.reportRenderedHeights({ canvasId: 'board', heights: { a: 68 } });
+    (store.renderedHeights('board') as Map<string, number>).set('a', 1);
+    expect(store.renderedHeights('board').get('a')).toBe(68);
+    expect(store.renderedHeights('other').size).toBe(0);
+  });
+
+  it('rejects malformed reports', async () => {
+    await expectStoreError(store.reportRenderedHeights({ canvasId: 'board', heights: { a: -1 } }), 'INVALID_INPUT');
+    await expectStoreError(
+      store.reportRenderedHeights({ canvasId: 'board', heights: { a: Infinity } }),
+      'INVALID_INPUT',
+    );
+    await expectStoreError(
+      store.reportRenderedHeights({ canvasId: 'board', heights: 'tall' as unknown as Record<string, number> }),
+      'INVALID_INPUT',
+    );
+    await expectStoreError(store.reportRenderedHeights({ canvasId: 'Not A Slug', heights: {} }), 'NOT_FOUND');
+    expect(store.renderedHeights('board').size).toBe(0);
+  });
+});

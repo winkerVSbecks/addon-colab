@@ -126,7 +126,12 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     ({ canvasId: id, includeStrokePoints }) =>
-      run(async () => summarizeCanvas(await store.get({ id }), await lookup(), { includeStrokePoints })),
+      run(async () =>
+        summarizeCanvas(await store.get({ id }), await lookup(), {
+          includeStrokePoints,
+          heights: store.renderedHeights(id),
+        }),
+      ),
   );
 
   server.registerTool(
@@ -159,7 +164,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
           for (const comment of canvas.comments) {
             if (status && comment.status !== status) continue;
             if (author && comment.author !== author) continue;
-            comments.push(summarizeComment(comment, canvas, stories));
+            comments.push(summarizeComment(comment, canvas, stories, store.renderedHeights(canvas.id)));
           }
         }
         comments.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -187,7 +192,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
           canvasId: id,
           comment: { author: 'agent', body: text, anchor: resolveAnchor(anchor, canvas) },
         });
-        return summarizeComment(comment, updated, await lookup());
+        return summarizeComment(comment, updated, await lookup(), store.renderedHeights(updated.id));
       }),
   );
 
@@ -211,7 +216,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
           commentId,
           reply: { author: 'agent', body: text },
         });
-        return summarizeComment(comment, canvas, await lookup());
+        return summarizeComment(comment, canvas, await lookup(), store.renderedHeights(canvas.id));
       }),
   );
 
@@ -227,7 +232,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
     ({ canvasId: id, commentId }) =>
       run(async () => {
         const { comment, canvas } = await store.resolveComment({ canvasId: id, commentId });
-        return summarizeComment(comment, canvas, await lookup());
+        return summarizeComment(comment, canvas, await lookup(), store.renderedHeights(canvas.id));
       }),
   );
 
@@ -242,7 +247,7 @@ export function createColabMcpServer({ store, stories, version = '0.0.0' }: Cola
     ({ canvasId: id, commentId }) =>
       run(async () => {
         const { comment, canvas } = await store.reopenComment({ canvasId: id, commentId });
-        return summarizeComment(comment, canvas, await lookup());
+        return summarizeComment(comment, canvas, await lookup(), store.renderedHeights(canvas.id));
       }),
   );
 

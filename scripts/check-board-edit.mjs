@@ -1,5 +1,5 @@
 // Moving, resizing and removing frames: instant locally, one write per gesture, no snap-back, no
-// story remount, persisted across reload; measured heights saved; remote (hand) edits show up;
+// story remount, persisted across reload; measured heights never saved; remote (hand) edits show up;
 // removal tears the story down; overlapping frames hit-test the top one.
 // Resets $CANVAS_DIR/board.json. Run: SB=http://127.0.0.1:6160 node scripts/check-board-edit.mjs
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -17,15 +17,15 @@ await waitForBoard(page, 3);
 const preview = previewFrame(page);
 const frameOf = (state, id) => state.frames.find((f) => f.id === id);
 
-// Measured heights are saved to the file.
+// Measured heights are not saved: only a resize writes a height.
 await page.waitForTimeout(1800);
 const domHeights = await preview.evaluate(() =>
   Object.fromEntries([...document.querySelectorAll('[data-colab-frame]')].map((e) => [e.dataset.colabFrame, e.offsetHeight])),
 );
 const saved = read();
 check(
-  'measured heights saved for every frame',
-  saved.frames.every((f) => f.height === domHeights[f.id]),
+  'measured heights are not written to the file',
+  saved.frames.every((f) => f.height === undefined) && Object.values(domHeights).every((h) => h > 0),
   { file: saved.frames.map((f) => [f.id, f.height]), dom: domHeights },
 );
 
@@ -64,7 +64,7 @@ check('story not remounted by the move or its change event', (await preview.eval
 check('frame is selected after moving it', (await boardState(page)).selectedId === 'frame_btn');
 
 // Resize from the corner.
-const btnHeight = frameOf(read(), 'frame_btn').height;
+const btnHeight = domHeights.frame_btn;
 await dragBy(preview.locator('[data-colab-chrome="frame_btn"] [data-colab-resize="se"]'), 100, 50);
 await page.waitForTimeout(1500);
 const resized = frameOf(read(), 'frame_btn');

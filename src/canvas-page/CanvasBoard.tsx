@@ -31,6 +31,7 @@ import { type StoryStatus, getPreview } from './board/story-mount';
 import { useBoardView } from './board/use-board-view';
 import { type PaintScene, useDrawableCanvas } from './board/use-drawable-canvas';
 import { useFrameEdits } from './board/use-frame-edits';
+import { useRenderedHeights } from './board/use-rendered-heights';
 import { usePanZoom } from './board/use-pan-zoom';
 import { useStoryDrop } from './board/use-story-drop';
 import { useUndoStack } from './board/use-undo-stack';
@@ -371,13 +372,14 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
     if (element) elementsRef.current.set(frameId, element);
     else elementsRef.current.delete(frameId);
   }, []);
-  const editsMeasured = edits.measured;
+  const reportHeight = useRenderedHeights(canvas.id, channel, canvas.frames);
   const onMeasure = useCallback(
-    (frameId: string, height: number) => {
+    (frameId: string, height: number, rendered: boolean) => {
       setHeights((current) => (current.get(frameId) === height ? current : new Map(current).set(frameId, height)));
-      editsMeasured(frameId, height);
+      // Only a rendered story's height means anything to the agent; never the missing or error card.
+      reportHeight(frameId, rendered ? height : null);
     },
-    [editsMeasured],
+    [reportHeight],
   );
   const onStatus = useCallback((frameId: string, status: StoryStatus) => {
     setTitles((current) => {
@@ -400,7 +402,6 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         onStart: () => {
           const frame = framesRef.current.find((f) => f.id === frameId);
           origin = frame && { x: frame.x, y: frame.y };
-          edits.setBusy(frameId, true);
           setMoving(true);
         },
         onMove: (dx, dy) => {
@@ -410,7 +411,6 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
         },
         onEnd: (moved) => {
           setMoving(false);
-          edits.setBusy(frameId, false);
           if (moved && origin) edits.commit(frameId);
         },
       };
@@ -427,7 +427,6 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
           if (!frame) return;
           const height = heightsRef.current.get(frameId) ?? frame.height ?? MIN_FRAME_HEIGHT;
           origin = { width: frame.width, height };
-          edits.setBusy(frameId, true);
         },
         onMove: (dx, dy) => {
           if (!origin) return;
@@ -438,7 +437,6 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
           edits.preview(frameId, changes);
         },
         onEnd: (moved) => {
-          edits.setBusy(frameId, false);
           if (moved && origin) edits.commit(frameId);
         },
       };

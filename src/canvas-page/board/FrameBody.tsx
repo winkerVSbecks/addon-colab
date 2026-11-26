@@ -21,8 +21,11 @@ export interface FrameBodyProps {
   preview: PreviewLike;
   /** Registers the element the canvas draws (null on unmount). */
   onElement: (frameId: string, element: HTMLDivElement | null) => void;
-  /** The rendered height in CSS pixels, whenever it changes. */
-  onMeasure: (frameId: string, height: number) => void;
+  /**
+   * The frame's height in CSS pixels, whenever it changes. `rendered` is false while the story is
+   * loading, missing or failed, so the height is that of a placeholder or message, not the story.
+   */
+  onMeasure: (frameId: string, height: number, rendered: boolean) => void;
   onStatus: (frameId: string, status: StoryStatus) => void;
   /** Removes this frame from the canvas (offered when its story no longer exists). */
   onRemove: (frameId: string) => void;
@@ -147,15 +150,16 @@ function FrameBodyImpl({
     if (refreshKey > 0) void mountRef.current?.refresh();
   }, [refreshKey]);
 
+  const rendered = status.kind === 'ready';
   useEffect(() => {
     const element = bodyRef.current;
     if (!element) return;
-    const report = () => callbacks.current.onMeasure(frameId, element.offsetHeight);
+    const report = () => callbacks.current.onMeasure(frameId, element.offsetHeight, rendered);
     report();
     const observer = new ResizeObserver(report);
     observer.observe(element);
     return () => observer.disconnect();
-  }, [frameId]);
+  }, [frameId, rendered]);
 
   const layout = status.kind === 'ready' ? storyLayout(status.story.parameters) : 'padded';
 

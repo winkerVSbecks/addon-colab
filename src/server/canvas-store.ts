@@ -67,6 +67,11 @@ export interface CanvasStore extends CanvasStoreOperations {
   watch(): Promise<void>;
   /** Stops watching. Operations keep working. */
   close(): Promise<void>;
+  /**
+   * The heights the board last reported drawing this canvas's frames at (`reportRenderedHeights`),
+   * by frame id. In memory only: empty until a browser has had the canvas open since the server started.
+   */
+  renderedHeights(canvasId: string): ReadonlyMap<string, number>;
 }
 
 export interface CanvasStoreOptions {
@@ -118,6 +123,13 @@ const frameChangesSchema = z
     height: frameSchema.shape.width.nullable(),
   })
   .partial();
+/** Frames per report; a canvas with more frames than this is not realistic. */
+const MAX_RENDERED_HEIGHTS = 1000;
+const renderedHeightsSchema = z
+  .record(z.string().min(1).max(200), z.number().positive().max(100_000).nullable())
+  .refine((heights) => Object.keys(heights).length <= MAX_RENDERED_HEIGHTS, {
+    message: `at most ${MAX_RENDERED_HEIGHTS} frames per report`,
+  });
 const bodySchema = z.string().trim().min(1);
 const commentInputSchema = z.object({ author: authorSchema, body: bodySchema, anchor: anchorSchema });
 const replyInputSchema = z.object({ author: authorSchema, body: bodySchema });
@@ -140,6 +152,8 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
    * for one edit, are not broadcast again.
    */
   const known = new Map<string, string | null>();
+  /** Rendered frame heights by canvas id, then frame id (see `renderedHeights`). Never written to disk. */
+  const rendered = new Map<string, Map<string, number>>();
   let watcher: FSWatcher | undefined;
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -446,6 +460,7 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
           throw error;
         }
         known.set(id, null);
+        rendered.delete(id);
         emit({ type: 'deleted', id, source: 'store' });
         return { id };
       });
@@ -646,6 +661,23 @@ export function createCanvasStore(options: CanvasStoreOptions): CanvasStore {
         result: current.strokes,
       }));
       return { canvas, strokes: result };
+    },
+
+    async reportRenderedHeights({ canvasId, heights, replace }) {
+      assertCanvasId(canvasId);
+      const input = parseInput(renderedHeightsSchema, heights, 'heights');
+      const current = (replace === true ? undefined : rendered.get(canvasId)) ?? new Map<string, number>();
+      for (const [frameId, height] of Object.entries(input)) {
+        if (height === null) current.delete(frameId);
+        else if (current.size < MAX_RENDERED_HEIGHTS || current.has(frameId)) current.set(frameId, Math.round(height));
+      }
+      if (current.size) rendered.set(canvasId, current);
+      else rendered.delete(canvasId);
+      return { canvasId };
+    },
+
+    renderedHeights(canvasId) {
+      return new Map(rendered.get(canvasId));
     },
   };
 

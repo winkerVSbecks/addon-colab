@@ -3,8 +3,8 @@
  * on top of the canvas file until the file has caught up (see `src/board/frame-edits.ts`), so our
  * own change event never snaps a frame back and remote changes still show.
  *
- * Also saves each frame's measured height when it differs from the stored one, so the agent's view
- * of the canvas (MCP summaries) uses real sizes instead of an assumed 400px.
+ * Only user changes are written. A frame's rendered height is never saved here: a stored `height`
+ * is the minimum the user resized the frame to (see `use-rendered-heights.ts` for the agent's view).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -21,9 +21,6 @@ import {
 import { withMinimumSize } from '../../board/frame-defaults';
 import type { CanvasFile, Frame } from '../../canvas-file';
 import { CanvasRequestError, type ChannelLike, type FrameChanges, requestCanvas } from '../../channel';
-
-/** How long a measured height must hold before it is saved (stories settle after loaders, fonts). */
-const HEIGHT_SAVE_DELAY = 800;
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -43,10 +40,6 @@ export interface FrameEditsApi {
    * Resolves to whether the frame is on the canvas afterwards.
    */
   restore: (frame: Frame, index: number) => Promise<boolean>;
-  /** Reports a rendered height; saved after it settles if it differs from the file. */
-  measured: (frameId: string, height: number) => void;
-  /** Frame ids with a pointer gesture in progress (their measured height is not saved meanwhile). */
-  setBusy: (frameId: string, busy: boolean) => void;
 }
 
 export function useFrameEdits(
@@ -60,9 +53,6 @@ export function useFrameEdits(
   canvasRef.current = canvas;
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
-  const busyRef = useRef(new Set<string>());
-  const heightTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  const lastHeights = useRef(new Map<string, number>());
 
   const update = useCallback((next: FrameEdits) => {
     if (next === editsRef.current) return;
@@ -148,57 +138,11 @@ export function useFrameEdits(
     [channel],
   );
 
-  const measured = useCallback(
-    (frameId: string, height: number) => {
-      lastHeights.current.set(frameId, height);
-      clearTimeout(heightTimers.current.get(frameId));
-      heightTimers.current.set(
-        frameId,
-        setTimeout(() => {
-          heightTimers.current.delete(frameId);
-          const rounded = Math.round(height);
-          const file = canvasRef.current.frames.find((frame) => frame.id === frameId);
-          if (!file || rounded <= 0 || file.height === rounded) return;
-          if (busyRef.current.has(frameId) || editsRef.current.has(frameId)) return;
-          requestCanvas(channel, 'updateFrame', {
-            canvasId: canvasRef.current.id,
-            frameId,
-            changes: { height: rounded },
-          }).catch((error: unknown) => {
-            if (error instanceof CanvasRequestError && error.code === 'NOT_FOUND') return;
-            onErrorRef.current(`Couldn't save the story's height: ${describe(error)}`);
-          });
-        }, HEIGHT_SAVE_DELAY),
-      );
-    },
-    [channel],
-  );
-
-  // A height measured while the frame had a pending edit was not saved; check again once settled.
-  useEffect(() => {
-    for (const frame of canvas.frames) {
-      const height = lastHeights.current.get(frame.id);
-      if (height !== undefined && Math.round(height) !== frame.height && !heightTimers.current.has(frame.id)) {
-        measured(frame.id, height);
-      }
-    }
-  }, [canvas, version, measured]);
-
-  useEffect(() => {
-    const timers = heightTimers.current;
-    return () => timers.forEach((timer) => clearTimeout(timer));
-  }, []);
-
-  const setBusy = useCallback((frameId: string, busy: boolean) => {
-    if (busy) busyRef.current.add(frameId);
-    else busyRef.current.delete(frameId);
-  }, []);
-
   // `version` changes whenever the edits (kept in a ref) change.
   const frames = useMemo(
     () => applyFrameEdits(canvas.frames, editsRef.current).map(withMinimumSize),
     [canvas.frames, version],
   );
 
-  return { frames, preview, commit, remove, restore, measured, setBusy };
+  return { frames, preview, commit, remove, restore };
 }

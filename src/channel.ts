@@ -134,6 +134,17 @@ export interface CanvasOperations {
   };
   /** Removes every stroke. `strokes` in the result are the removed ones (for undo). */
   clearStrokes: { args: { canvasId: string }; result: { canvas: CanvasFile; strokes: Stroke[] } };
+  /**
+   * The board says how tall it draws each story frame (CSS pixels), so the agent's view uses real
+   * sizes. Kept in the dev server's memory only: never written to the canvas file and no change
+   * event. `null` forgets a frame's height (its story is missing or failed to render). Heights for
+   * frames not in `heights` are kept, unless `replace` is true (a board's first report after it
+   * mounts), which forgets every height reported before.
+   */
+  reportRenderedHeights: {
+    args: { canvasId: string; heights: Record<string, number | null>; replace?: boolean };
+    result: { canvasId: string };
+  };
 }
 
 export type CanvasOperation = keyof CanvasOperations;
@@ -162,6 +173,7 @@ export const CANVAS_OPERATIONS = [
   'removeStrokes',
   'restoreStrokes',
   'clearStrokes',
+  'reportRenderedHeights',
 ] as const satisfies readonly CanvasOperation[];
 
 /**
