@@ -28,6 +28,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       dist-tag: ${{ steps.version.outputs.dist-tag }}
+      published: ${{ steps.registry.outputs.published }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,6 +56,43 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "dist-tag=$dist_tag" >> "$GITHUB_OUTPUT"
 
+      # Decided once, here: is this exact version already on npm? Read-only, no credentials.
+      # 200 = published, 404 = not published, anything else (network error, 5xx, ...) fails
+      # the run, so a registry problem is never taken as an answer either way.
+      - name: Check whether this version is already on npm
+        id: registry
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          REGISTRY: https://registry.npmjs.org
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          body="$(mktemp)"
+          status="$(curl --silent --show-error --location --retry 3 --retry-connrefused --max-time 30 \
+            --output "$body" --write-out '%{http_code}' "$REGISTRY/$name/$VERSION")" || {
+            echo "::error::Could not reach $REGISTRY to check whether $name@$VERSION is published."
+            exit 1
+          }
+          case "$status" in
+            200)
+              found="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).version" "$body")"
+              if [ "$found" != "$VERSION" ]; then
+                echo "::error::$REGISTRY returned version '$found' for $name@$VERSION."
+                exit 1
+              fi
+              echo "::notice::$name@$VERSION is already on npm; nothing will be published."
+              published=true
+              ;;
+            404)
+              echo "$name@$VERSION is not on npm yet."
+              published=false
+              ;;
+            *)
+              echo "::error::$REGISTRY answered HTTP $status for $name@$VERSION; cannot tell whether it is published."
+              exit 1
+              ;;
+          esac
+          echo "published=$published" >> "$GITHUB_OUTPUT"
+
       - name: Install pnpm
         uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
 
@@ -80,14 +118,24 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # npm publish --dry-run fails for a version that is already on npm, so list the
+      # contents with npm pack --dry-run in that case.
       - name: Check the package contents
         env:
           DIST_TAG: ${{ steps.version.outputs.dist-tag }}
-        run: npm publish --dry-run --tag "$DIST_TAG"
+          PUBLISHED: ${{ steps.registry.outputs.published }}
+        run: |
+          if [ "$PUBLISHED" = "true" ]; then
+            npm pack --dry-run
+          else
+            npm publish --dry-run --tag "$DIST_TAG"
+          fi
 
   publish:
     name: Publish to npm
     needs: verify
+    # Skipped (no approval asked) when the version is already on npm; the verify job says so.
+    if: needs.verify.outputs.published == 'false'
     runs-on: ubuntu-latest
     # Require approval for each release in Settings → Environments → npm.
     # The same name must be entered as the environment in the npm trusted publisher.
@@ -127,10 +175,4 @@ jobs:
         run: pnpm build
 
       - name: Publish
-        run: |
-          published="$(npm view "storybook-addon-colab@$VERSION" version 2> /dev/null || true)"
-          if [ "$published" = "$VERSION" ]; then
-            echo "::notice::storybook-addon-colab@$VERSION is already on npm; nothing to publish."
-            exit 0
-          fi
-          npm publish --provenance --access public --tag "$DIST_TAG"
+        run: npm publish --provenance --access public --tag "$DIST_TAG"
