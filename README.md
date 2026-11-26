@@ -7,7 +7,7 @@ Each canvas is a JSON file in your repository, so canvases can be committed, rev
 ## A short walkthrough
 
 1. **Create a canvas.** Click **Canvases** in Storybook's toolbar and choose **New canvas…**. The canvas appears in the sidebar under **Canvases** and opens.
-2. **Add stories.** Drag a story from the sidebar onto the board. It lands where you drop it and stays live: you can click its buttons and type in its inputs. You can also open a story and use **Add to canvas** in the toolbar. Drag a story's title to move it, drag its right or bottom edge to resize it, and use the ✕ next to the title to remove it.
+2. **Add stories.** Drag a story from the sidebar onto the board. It lands where you drop it and stays live: you can click its buttons and type in its inputs. You can also open a story and use **Add to canvas** in the toolbar. Drag a story's title to move it. Click the title to select the story; a selected story has resize handles on its right and bottom edges and an ✕ next to its title that removes it.
 3. **Comment.** Switch to comment mode (the comment button in the board's toolbar, or press <kbd>C</kbd>). Hovering highlights the element under the pointer. Click to pin a comment to it, type, and press <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+<kbd>Enter</kbd>. Click a story's empty area to comment on the whole story, or the empty board to comment on a spot.
 4. **Draw.** Switch to draw mode (the pencil, or <kbd>D</kbd>) and sketch over the stories: circle a problem, cross something out. Pick a colour and width, or switch to the eraser.
 5. **Connect an agent** (see [Connect a coding agent](#connect-a-coding-agent)) and ask it something like "fix the open comments on the design-review canvas".
@@ -23,7 +23,7 @@ Each canvas is a JSON file in your repository, so canvases can be committed, rev
 
 ## Install
 
-The addon is not published to npm yet. Build it from this repository and install it from the local folder:
+The addon is not published to npm yet. Build it from source and install it from the local folder. Until the pull request that adds the addon is merged, its code is only on the `storybook-build` branch, so run `git checkout storybook-build` after cloning.
 
 ```sh
 git clone https://github.com/winkervsbecks/addon-colab
@@ -119,7 +119,9 @@ The path is different from `@storybook/addon-mcp`'s `/mcp`, so both addons can b
 | `resolve_canvas_comment`  | Marks a comment resolved. Resolving an already resolved comment changes nothing and keeps its original `resolvedAt`.                                                                                                                                                                      |
 | `reopen_canvas_comment`   | Marks a resolved comment open again.                                                                                                                                                                                                                                                      |
 
-Everything the agent writes is marked `author: "agent"` and shows on an open canvas without a reload. Coordinates are board pixels at zoom 1. Errors come back as text starting with a code, such as `NOT_FOUND:` or `INVALID_INPUT:`.
+Everything the agent writes is marked `author: "agent"` and shows on an open canvas without a reload. Coordinates are board pixels at zoom 1.
+
+Frames size to their content, which the server can't measure. While a canvas is open in Storybook, the board tells the dev server how tall it draws each story, and `get_canvas` returns that as `renderedHeight`. The dev server keeps it in memory only and never writes it to the canvas file. `height` is the minimum height someone resized the frame to. The stroke and position summaries use `renderedHeight`, then `height`, and otherwise assume 400 pixels; `get_canvas` adds a `note` when it had to assume a height. Open the canvas once after starting Storybook to give the agent real heights. Errors come back as text starting with a code, such as `NOT_FOUND:` or `INVALID_INPUT:`.
 
 ### What a comment's location contains
 
@@ -156,7 +158,7 @@ The location describes the element as it was when the comment was pinned. It doe
 The endpoint has no authentication, like the rest of Storybook's dev server. Anything that can reach the dev server can read and write your canvases through it.
 
 - With the default host, Storybook listens on your machine only. The endpoint also refuses browser requests whose `Origin` is not an allowed host, so a web page on another site can't call it through your browser.
-- **If you run Storybook with `--host 0.0.0.0` and no `core.allowedHosts`, Storybook accepts every host name.** Then anyone on your network can read and write canvases, and so can a web page using DNS rebinding, because the Origin check accepts every host too. If you need `--host 0.0.0.0`, list the host names you use:
+- **If you run Storybook with `--host 0.0.0.0` and no `core.allowedHosts`, Storybook accepts every host name.** Then anyone on your network can read and write canvases, and so can a web page using DNS rebinding, because the Origin check accepts every host too. Listing the host names you use blocks DNS rebinding and requests made under other host names:
 
   ```ts
   export default defineMain({
@@ -167,13 +169,16 @@ The endpoint has no authentication, like the rest of Storybook's dev server. Any
 
   `allowedHosts: true` turns the check off entirely; avoid it.
 
+  `allowedHosts` does not make the endpoint private: anyone who can reach your machine's IP address can still read and write canvases. Do not use `--host 0.0.0.0` on a network you don't trust.
+
 ## Using a canvas
 
 - **Canvases** in the toolbar lists your canvases and creates, renames and deletes them. Each canvas is also a sidebar entry under **Canvases**; its URL stays the same when you rename it.
 - **Add to canvas** in the toolbar, shown while a story is open, adds that story to a canvas you pick, to the right of its other stories.
 - **Pan** with the trackpad or mouse wheel, by dragging the empty background, with the middle mouse button, or by holding <kbd>Space</kbd> and dragging. **Zoom** (10% to 400%) by pinching, with <kbd>⌘</kbd>/<kbd>Ctrl</kbd>+wheel, or with the zoom buttons in the board's toolbar. **Zoom to fit** frames every story and comment. Storybook's own toolbar zoom is hidden on canvas pages.
-- **Select** a story by clicking its title or anything inside it; the selected story comes to the front. Its title bar has **Open story** and **Remove from canvas**.
-- A story's frame is as tall as its content, and at least as tall as you resized it to. Frames are at least 120 × 40 pixels.
+- **Select** a story by clicking its title or anything inside it; the selected story comes to the front. Only the selected story shows **Open story** and **Remove from canvas** in its title bar, and resize handles on its right edge, bottom edge and corner.
+- A story's frame is as tall as its content. Dragging its bottom edge saves a height, and from then on the frame is at least that tall; it still grows when its content is taller. Frames are at least 120 × 40 pixels. The board never saves a height on its own, so opening a canvas does not change its file.
+- Storybook 11 marks a canvas you have edited as new or modified in the sidebar, the same as a story file you changed, because each canvas is a file in your repository.
 - **Comments:** the **Comments** button opens the list of open comments (and resolved ones, with **Resolved**). Click a pin or a list row to open its thread, where you can reply, resolve or reopen, and delete.
 - **Drawing:** pen or eraser (the eraser removes whole strokes), six colours (one follows the light or dark theme) and three widths. **Clear drawing** removes every stroke after a confirmation.
 - The layout is saved to the canvas file as you work. Where you panned and zoomed is remembered per canvas in your browser, not in the file.
@@ -261,7 +266,7 @@ One JSON file per canvas, named after its id: `.storybook/canvases/design-review
 ```
 
 - `id` is a lowercase slug (letters, digits, single dashes) and must match the file name. Timestamps are ISO strings in UTC. Coordinates are board pixels at zoom 1. Ids are unique across frames, comments, replies and strokes.
-- **Frames** are `{ id, storyId, x, y, width, height? }`. Without `height` the frame takes its content's height. Their order in the file is the stacking order: the last one is on top.
+- **Frames** are `{ id, storyId, x, y, width, height? }`. Without `height` the frame takes its content's height. `height` is written only when someone resizes the frame's height, and the frame is then at least that tall. Files from earlier versions of the addon may have a `height` on every frame (the board used to save measured heights); those heights are treated the same way, as minimums. Their order in the file is the stacking order: the last one is on top.
 - **Comments** are `{ id, author: "user" | "agent", body, status: "open" | "resolved", anchor, createdAt, resolvedAt?, replies }`. `resolvedAt` is present exactly when `status` is `"resolved"`. **Replies** are `{ id, author, body, createdAt }`.
 - **Anchors** are one of:
   - `{ "type": "element", frameId, target }`: an element inside a story.
@@ -313,7 +318,7 @@ Also:
 - Elements inside a shadow root, an iframe or a portal can't be commented on individually; comment on the story instead.
 - Commenting needs a pointer. There is no keyboard-only way to pin a comment.
 - Only removing stories, deleting comments and drawing can be undone. Adding a comment and moving or resizing a story can't.
-- Tab order of story titles follows the order stories were added, not their position on the board.
+- Tab order of story titles follows the frames' internal ids, not their position on the board or the order they were added.
 - A change made elsewhere (another tab, a hand edit, the agent) to a story's position or size while you are dragging or resizing that story is overwritten when you let go: the last writer wins.
 - Right after you create a new canvas, the first change to a story file can reload the whole board once, which resets the stories' state.
 - Removing a story leaves about 130 event listeners held by Storybook's own preview caches (not the addon's code). Storybook's cache may bound this; it only matters after adding and removing many stories in one session.
