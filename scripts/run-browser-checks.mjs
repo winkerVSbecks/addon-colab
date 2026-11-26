@@ -7,7 +7,11 @@
 // stories plus scripts/fixtures) on $PORT (default 6190), with canvases in .sb-checks/canvases, a
 // git-ignored folder it empties before and deletes after the run. It never reads or writes
 // .storybook/canvases. Needs the installed Google Chrome 157+ ($CHROME to override its path).
-import { spawn } from 'node:child_process';
+//
+// Some checks delete a story file in scripts/fixtures and put it back. A check the runner kills
+// (SIGKILL after 10 minutes, or $CHECK_TIMEOUT_MS) cannot do that, so the runner puts back any tracked fixture that is
+// missing, from git, before the run and when it ends.
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -21,6 +25,22 @@ const WORK_DIR = join(ROOT, '.sb-checks');
 const CANVAS_DIR = join(WORK_DIR, 'canvases');
 const OUT = mkdtempSync(join(tmpdir(), 'colab-checks-'));
 const filters = process.argv.slice(2);
+/** A check still running after this long is killed (SIGKILL). */
+const CHECK_TIMEOUT = Number(process.env.CHECK_TIMEOUT_MS ?? 10 * 60_000);
+
+/** Restores tracked files in scripts/fixtures that are deleted (never touches edited ones). */
+function restoreFixtures() {
+  const git = (...args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+  try {
+    const missing = git('ls-files', '--deleted', '--', 'scripts/fixtures').split('\n').filter(Boolean);
+    if (missing.length === 0) return;
+    git('checkout', '--', ...missing);
+    console.log(`Restored ${missing.join(', ')} from git`);
+  } catch (error) {
+    console.error(`Could not restore scripts/fixtures from git: ${error.message}`);
+  }
+}
+restoreFixtures();
 
 const checks = readdirSync(join(ROOT, 'scripts'))
   .filter((name) => /^check-board-.*\.mjs$/.test(name))
@@ -66,10 +86,17 @@ function stopServer() {
   }
   rmSync(WORK_DIR, { recursive: true, force: true });
 }
-process.on('SIGINT', () => {
+process.on('exit', () => {
   stopServer();
-  process.exit(130);
+  restoreFixtures();
 });
+for (const [signal, number] of [
+  ['SIGINT', 2],
+  ['SIGTERM', 15],
+  ['SIGHUP', 1],
+]) {
+  process.on(signal, () => process.exit(128 + number));
+}
 
 const results = [];
 try {
@@ -94,9 +121,10 @@ try {
         env: { ...process.env, SB, CANVAS_DIR, OUT },
         stdio: 'inherit',
       });
-      const timer = setTimeout(() => child.kill('SIGKILL'), 10 * 60_000);
+      const timer = setTimeout(() => child.kill('SIGKILL'), CHECK_TIMEOUT);
       child.on('exit', (exitCode) => {
         clearTimeout(timer);
+        restoreFixtures();
         resolve(exitCode ?? 1);
       });
     });

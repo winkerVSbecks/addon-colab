@@ -1,19 +1,20 @@
 // Frame heights are never written by the board on its own: opening a canvas and leaving it alone
 // does not change its file, a story that disappears and comes back returns to its own height, a
 // stored height (the user's resize) still acts as a minimum, and the agent sees the heights the
-// board draws (MCP get_canvas `renderedHeight`). Deletes and restores scripts/fixtures/HeightProbe.stories.tsx.
+// board draws (MCP get_canvas `renderedHeight`). Deletes and restores scripts/fixtures/HeightProbe.stories.tsx
+// (put back on exit, error or interrupt by guardFile; the runner also restores it from git).
 // Writes $CANVAS_DIR/heights.json. Run with `pnpm check:browser heights`.
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { SB, check, done, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';
+import { SB, check, done, guardFile, launch, previewFrame, setView, waitForBoard } from './board-lib.mjs';
 
 const CANVAS_DIR = process.env.CANVAS_DIR;
 if (!CANVAS_DIR) throw new Error('CANVAS_DIR is not set; run with `pnpm check:browser heights`');
 const FILE = resolve(CANVAS_DIR, 'heights.json');
 const PROBE = fileURLToPath(new URL('./fixtures/HeightProbe.stories.tsx', import.meta.url));
-const probeSource = readFileSync(PROBE, 'utf8');
+const { source: probeSource, restore: restoreProbe } = guardFile(PROBE);
 const BELOW_Y = 90;
 
 const canvas = {
@@ -137,7 +138,7 @@ try {
   );
   check('no unexpected page errors', serious.length === 0, serious);
 } finally {
-  writeFileSync(PROBE, probeSource);
+  restoreProbe();
   await browser.close();
 }
 await new Promise((r) => setTimeout(r, 1000));
