@@ -243,8 +243,10 @@ describe('mountStory retries a failed load', () => {
     try {
       const { preview, log } = fakePreview(() => new TypeError('importers[path] is not a function'));
       const statuses: string[] = [];
-      mountStory(preview, 'example-button--primary', element, (status) => statuses.push(status.kind));
-      await vi.advanceTimersByTimeAsync(10_000);
+      mountStory(preview, 'example-button--primary', element, (status) => statuses.push(status.kind), {
+        reloadStories: async () => false,
+      });
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(log.filter((line) => line.startsWith('load'))).toHaveLength(1 + RETRY_DELAYS.length);
       expect(statuses.at(-1)).toBe('error');
     } finally {
@@ -259,10 +261,94 @@ describe('mountStory retries a failed load', () => {
       const mount = mountStory(preview, 'example-button--primary', element, () => undefined);
       await vi.advanceTimersByTimeAsync(0);
       await mount.teardown();
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(log.filter((line) => line.startsWith('load'))).toHaveLength(1);
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('mountStory with a stale map of story files', () => {
+  const stale = () => new TypeError('importers[path] is not a function');
+
+  it('reloads the map once and renders when the reload fixed it (no timer needed)', async () => {
+    const story = storyOf();
+    let fixed = false;
+    const { preview, log } = fakePreview(() => (fixed ? story : stale()));
+    const reloadStories = vi.fn(async () => {
+      fixed = true;
+      return true;
+    });
+    const statuses: string[] = [];
+    const mount = mountStory(preview, story.id, element, (status) => statuses.push(status.kind), { reloadStories });
+    await mount.refresh();
+    expect(reloadStories).toHaveBeenCalledTimes(1);
+    expect(statuses).toEqual(['loading', 'ready']);
+    // The first load, the one after the reload, and the refresh's.
+    expect(log.filter((line) => line.startsWith('load'))).toHaveLength(3);
+    expect(log.filter((line) => line.startsWith('render'))).toHaveLength(1);
+  });
+
+  it('does not reload the map for other errors, nor when the story is missing', async () => {
+    const reloadStories = vi.fn(async () => true);
+    for (const error of [missingError(), new Error('boom')]) {
+      const { preview } = fakePreview(() => error);
+      const mount = mountStory(preview, 'example-button--primary', element, () => undefined, { reloadStories });
+      await mount.refresh();
+      await mount.teardown();
+    }
+    expect(reloadStories).not.toHaveBeenCalled();
+  });
+
+  it('keeps reloading on each timed retry while the map stays stale, then stops', async () => {
+    vi.useFakeTimers();
+    try {
+      const { preview, log } = fakePreview(() => stale());
+      const reloadStories = vi.fn(async () => true);
+      const statuses: string[] = [];
+      mountStory(preview, 'example-button--primary', element, (status) => statuses.push(status.kind), {
+        reloadStories,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(reloadStories).toHaveBeenCalledTimes(1 + RETRY_DELAYS.length);
+      // Each attempt loads, reloads the map, and loads again.
+      expect(log.filter((line) => line.startsWith('load'))).toHaveLength(2 * (1 + RETRY_DELAYS.length));
+      expect(statuses.at(-1)).toBe('error');
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(reloadStories).toHaveBeenCalledTimes(1 + RETRY_DELAYS.length);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('recovers on a later refresh (Storybook reported a change) after the retries gave up', async () => {
+    vi.useFakeTimers();
+    try {
+      const story = storyOf();
+      let answer: PreparedStoryLike | Error = stale();
+      const { preview } = fakePreview(() => answer);
+      const statuses: string[] = [];
+      const mount = mountStory(preview, story.id, element, (status) => statuses.push(status.kind), {
+        reloadStories: async () => false,
+      });
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(statuses.at(-1)).toBe('error');
+      answer = story;
+      await mount.refresh();
+      expect(statuses.at(-1)).toBe('ready');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retry renders again even when the story did not change', async () => {
+    const story = storyOf();
+    const { preview, log } = fakePreview(() => story);
+    const mount = mountStory(preview, story.id, element, () => undefined);
+    await mount.refresh();
+    expect(log.filter((line) => line.startsWith('render'))).toHaveLength(1);
+    await mount.retry();
+    expect(log.filter((line) => line.startsWith('render'))).toHaveLength(2);
   });
 });

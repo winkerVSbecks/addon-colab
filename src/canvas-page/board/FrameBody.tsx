@@ -75,7 +75,7 @@ const Message = styled.div(({ theme }) => ({
   background: theme.background.negative,
   '& strong': { display: 'block', color: theme.color.negativeText, marginBottom: 4 },
   '& pre': {
-    margin: 0,
+    margin: '0 0 8px',
     whiteSpace: 'pre-wrap',
     fontFamily: theme.typography.fonts.mono,
     fontSize: theme.typography.size.s1,
@@ -186,9 +186,12 @@ function FrameBodyImpl({
         </Missing>
       )}
       {status.kind === 'error' && (
-        <Message role="alert">
+        <Message role="alert" data-colab-frame-error="">
           <strong>{status.title}</strong>
           <pre>{status.message}</pre>
+          <Button variant="outline" size="small" ariaLabel={false} onClick={() => void mountRef.current?.retry()}>
+            Retry
+          </Button>
         </Message>
       )}
     </Body>

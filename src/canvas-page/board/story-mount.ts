@@ -5,6 +5,8 @@
  * typed here with only what the board uses. `storyStoreValue` is protected and not used.
  */
 
+import { type StoriesChangedTarget, isStaleStoriesModuleError, reloadStoriesModule } from './stories-module';
+
 /** The parts of a prepared story the board reads. */
 export interface PreparedStoryLike {
   id: string;
@@ -19,7 +21,7 @@ interface RenderCallbacks {
   showException: (error: Error) => void;
 }
 
-export interface PreviewLike {
+export interface PreviewLike extends StoriesChangedTarget {
   loadStory: (selection: { storyId: string }) => Promise<PreparedStoryLike>;
   renderStoryToElement: (
     story: PreparedStoryLike,
@@ -45,8 +47,13 @@ export type StoryStatus =
   | { kind: 'error'; title: string; message: string; story?: PreparedStoryLike };
 
 export interface StoryMount {
-  /** Re-renders if the story's implementation changed (after hot reload of its file). */
+  /**
+   * Reloads the story: re-renders if its implementation changed (after hot reload of its file), and
+   * tries again if it is missing or failed to load (the story index or the preview's modules changed).
+   */
   refresh: () => Promise<void>;
+  /** Loads and renders the story again even if nothing changed (the error card's Retry). */
+  retry: () => Promise<void>;
   /** Unmounts the story and stops its play function. Safe to call twice. */
   teardown: () => Promise<void>;
 }
@@ -74,18 +81,30 @@ export function isMissingStoryError(error: unknown): boolean {
  * by React Fast Refresh without this. A story that is not in the index is reported as `missing`
  * (also when it disappears later: its render is torn down), and mounts if a refresh finds it again.
  *
- * A load that fails is tried again after `RETRY_DELAYS`: when a story file is deleted and comes
- * back, Storybook announces the change (and may reload the page) before the file can be imported,
- * so the first load reports the story as missing or failing although it is about to be there.
+ * When a story file is deleted and comes back, Storybook announces the change (and may reload the
+ * page) before the file can be imported, so a load can report the story as missing or failing
+ * although it is about to be there. Three things bring it back:
+ * - the board calls `refresh` whenever Storybook reports that its stories changed (the same moments
+ *   Storybook's own story view re-renders);
+ * - a load that fails because the preview's map of story files is stale ("importers[path] is not a
+ *   function") reloads that map (`reloadStories`, see stories-module.ts) and loads again at once;
+ * - a load that fails is tried again after each of `RETRY_DELAYS`, then left alone (a story that
+ *   stays missing is not retried forever). Any later refresh starts a new series.
  */
 /** Delays (ms) before trying a failed load again. A later refresh starts a new series. */
-export const RETRY_DELAYS = [500, 2000];
+export const RETRY_DELAYS = [500, 1500, 3000, 6000, 12000];
+
+export interface MountStoryOptions {
+  /** Reloads the preview's map of story files; resolves whether it got a new one. */
+  reloadStories?: () => Promise<boolean>;
+}
 
 export function mountStory(
   preview: PreviewLike,
   storyId: string,
   element: HTMLElement,
   onStatus: (status: StoryStatus) => void,
+  { reloadStories = () => reloadStoriesModule(preview) }: MountStoryOptions = {},
 ): StoryMount {
   let current: PreparedStoryLike | undefined;
   let teardownRender: (() => Promise<void>) | undefined;
@@ -133,11 +152,21 @@ export function mountStory(
     }, delay);
   };
 
+  /** `loadStory`, reloading the preview's map of story files once if it is stale. */
+  const loadFresh = async () => {
+    try {
+      return await preview.loadStory({ storyId });
+    } catch (error) {
+      if (disposed || !isStaleStoriesModuleError(error) || !(await reloadStories())) throw error;
+      return preview.loadStory({ storyId });
+    }
+  };
+
   const load = async (initial: boolean, attempt = 0, id = ++series) => {
     if (disposed) return;
     let story: PreparedStoryLike;
     try {
-      story = await preview.loadStory({ storyId });
+      story = await loadFresh();
     } catch (error) {
       if (disposed) return;
       retryLater(initial, attempt, id);
@@ -160,6 +189,7 @@ export function mountStory(
 
   return {
     refresh: () => enqueue(() => load(false)),
+    retry: () => enqueue(() => load(true)),
     teardown: () => {
       disposed = true;
       clearTimeout(retryTimer);

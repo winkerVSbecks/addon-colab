@@ -7,7 +7,7 @@
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
-import { SELECT_STORY, STORY_UNCHANGED } from 'storybook/internal/core-events';
+import { SELECT_STORY, STORY_HOT_UPDATED, STORY_UNCHANGED } from 'storybook/internal/core-events';
 import { styled, useTheme } from 'storybook/theming/emotion';
 
 import { inStableOrder, isOnTop, raiseSettled, withRaised } from '../board/frame-order';
@@ -28,6 +28,7 @@ import { FrameChrome, type GestureHandlers, type ResizeEdge } from './board/Fram
 import { type ModeHandlers, ModeLayer } from './board/ModeLayer';
 import { drawableCanvasProps } from './board/html-in-canvas';
 import { type StoryStatus, getPreview } from './board/story-mount';
+import { isReloadingStoriesModule } from './board/stories-module';
 import { useBoardView } from './board/use-board-view';
 import { type PaintScene, useDrawableCanvas } from './board/use-drawable-canvas';
 import { useFrameEdits } from './board/use-frame-edits';
@@ -236,12 +237,22 @@ export function CanvasBoard({ canvas, channel }: CanvasBoardProps) {
   });
   modeHandlers.comment = comments.handlers;
 
-  // A story file was hot-reloaded: Storybook re-renders the canvas entry as "unchanged", so each
-  // frame reloads its story and re-renders it if its implementation changed.
+  // Storybook's stories changed: a story file was hot-reloaded (Storybook re-renders the canvas
+  // entry as "unchanged"), or the preview got a new story index or map of story files (it re-renders
+  // its selection, and Vite reports the finished update). These are the moments Storybook's own
+  // story view re-renders, so each frame reloads its story: it re-renders if its implementation
+  // changed, and a missing or failed story tries again. The board's own reload of the map of story
+  // files (stories-module.ts) is not a new change and is ignored.
   useEffect(() => {
-    const onUnchanged = () => setRefreshKey((key) => key + 1);
-    channel.on(STORY_UNCHANGED, onUnchanged);
-    return () => channel.off(STORY_UNCHANGED, onUnchanged);
+    const onStoriesChanged = () => {
+      if (!isReloadingStoriesModule()) setRefreshKey((key) => key + 1);
+    };
+    channel.on(STORY_UNCHANGED, onStoriesChanged);
+    channel.on(STORY_HOT_UPDATED, onStoriesChanged);
+    return () => {
+      channel.off(STORY_UNCHANGED, onStoriesChanged);
+      channel.off(STORY_HOT_UPDATED, onStoriesChanged);
+    };
   }, [channel]);
 
   // The selected frame was removed (here or elsewhere).

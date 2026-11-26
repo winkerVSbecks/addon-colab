@@ -2,7 +2,9 @@
 // playwright-core (a dev dependency): Playwright's bundled Chromium has no HTML-in-Canvas.
 // Run them all with `pnpm check:browser` (scripts/run-browser-checks.mjs), which starts a throwaway
 // Storybook with its own config and canvas folder and sets $SB and $CANVAS_DIR for each check.
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { chromium } from 'playwright-core';
@@ -89,11 +91,54 @@ export async function modelPoint(page, frameId, selector) {
       const boardRect = board.getBoundingClientRect();
       const wx = frame.x + x + target.offsetWidth / 2;
       const wy = frame.y + y + target.offsetHeight / 2;
-      return { x: boardRect.left + state.view.x + wx * state.view.zoom, y: boardRect.top + state.view.y + wy * state.view.zoom };
+      return {
+        x: boardRect.left + state.view.x + wx * state.view.zoom,
+        y: boardRect.top + state.view.y + wy * state.view.zoom,
+      };
     },
     { frameId, selector },
   );
   return { x: iframe.x + local.x, y: iframe.y + local.y };
+}
+
+/**
+ * For checks that delete a fixture file: remembers its contents and writes them back when the check
+ * ends, throws, or is interrupted (SIGINT, SIGTERM, SIGHUP). A SIGKILL cannot be caught, so
+ * scripts/run-browser-checks.mjs also restores scripts/fixtures from git before and after a run.
+ * Returns `restore()`, which writes the file back if it is missing or changed.
+ */
+const ROOT = fileURLToPath(new URL('..', import.meta.url));
+
+export function guardFile(path) {
+  let source;
+  try {
+    source = readFileSync(path, 'utf8');
+  } catch {
+    // An earlier run was killed while the file was deleted: take it from git.
+    source = execFileSync('git', ['show', `HEAD:./${relative(ROOT, path)}`], { cwd: ROOT, encoding: 'utf8' });
+    writeFileSync(path, source);
+  }
+  const restore = () => {
+    let current;
+    try {
+      current = readFileSync(path, 'utf8');
+    } catch {
+      // deleted
+    }
+    if (current !== source) writeFileSync(path, source);
+  };
+  process.on('exit', restore);
+  for (const [signal, number] of [
+    ['SIGINT', 2],
+    ['SIGTERM', 15],
+    ['SIGHUP', 1],
+  ]) {
+    process.on(signal, () => {
+      restore();
+      process.exit(128 + number);
+    });
+  }
+  return { source, restore };
 }
 
 export async function setView(page, canvasId, view) {
