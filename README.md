@@ -407,7 +407,7 @@ From [Trusted publishing for npm packages](https://docs.npmjs.com/trusted-publis
 3. Approve the `npm` deployment in the workflow run (Actions tab).
 4. Check the result: `npm view storybook-addon-colab dist-tags`, and the provenance badge on the package page.
 
-To lint the package before a release: `npx publint` and `npx @arethetypeswrong/cli --pack . --profile esm-only` (the addon is ESM-only, like Storybook 11; the `preset` and `manager` entries are loaded by Storybook and have no types).
+To lint the package before a release: `npx publint` and `npx @arethetypeswrong/cli --pack . --profile esm-only --exclude-entrypoints ./preset ./manager`. The addon is ESM-only, like Storybook 11, and the `preset` and `manager` entries are loaded by Storybook, not imported, so they ship without types.
 
 ## License
 
